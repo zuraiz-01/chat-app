@@ -3,6 +3,7 @@ import 'package:chat_app/providers/friend_provider.dart';
 import 'package:chat_app/providers/user_provider.dart';
 import 'package:chat_app/routes/app_routes.dart';
 import 'package:flutter/material.dart';
+// ignore: unused_import
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:get/get.dart';
@@ -375,60 +376,6 @@ class _FriendsScreenState extends State<FriendsScreen>
       floatingActionButton: FloatingActionButton(
         onPressed: () => Get.toNamed(AppRoutes.search),
         child: Icon(Iconsax.add_bold, size: 20.sp),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(icon: Icon(Iconsax.home_bold), label: 'Home'),
-          BottomNavigationBarItem(
-            icon: Icon(Iconsax.message_bold),
-            label: 'Chats',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Iconsax.people_bold),
-            label: 'Groups',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Iconsax.call_bold),
-            label: 'Calls',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Iconsax.user_bold),
-            label: 'Friends',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Iconsax.setting_bold),
-            label: 'Settings',
-          ),
-        ],
-        currentIndex: 4, // Friends
-        selectedItemColor: const Color(0xFF10451D),
-        unselectedItemColor: Colors.grey,
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              Get.offAllNamed(AppRoutes.home);
-              break;
-            case 1:
-              Get.offAllNamed(AppRoutes.chatList);
-              break;
-            case 2:
-              Get.offAllNamed(AppRoutes.groups);
-              break;
-            case 3:
-              Get.offAllNamed(AppRoutes.calls);
-              break;
-            case 4:
-              // Already here
-              break;
-            case 5:
-              Get.offAllNamed(AppRoutes.settings);
-              break;
-          }
-        },
-        type: BottomNavigationBarType.fixed,
-        iconSize: 20.sp,
-        selectedFontSize: 14.sp,
-        unselectedFontSize: 12.sp,
       ),
     );
   }
