@@ -30,7 +30,7 @@ class FriendProvider extends GetxController {
         final friendsData = await supabase
             .from('friends')
             .select(
-              'friend_id, profiles!friends_friend_id_fkey(id, name, avatar, bio, is_online, last_seen)',
+              'friend_id, profiles!friends_friend_id_fkey(id, username, avatar_url, bio, is_online, last_seen)',
             )
             .eq('user_id', user.id)
             .eq('status', 'accepted');
@@ -53,7 +53,7 @@ class FriendProvider extends GetxController {
         final incoming = await supabase
             .from('friend_requests')
             .select(
-              'id, sender_id, profiles!friend_requests_sender_id_fkey(id, name, avatar), created_at',
+              'id, sender_id, profiles!friend_requests_sender_id_fkey(id, username, avatar_url), created_at',
             )
             .eq('receiver_id', user.id)
             .eq('status', 'pending');
@@ -73,7 +73,7 @@ class FriendProvider extends GetxController {
         final outgoing = await supabase
             .from('friend_requests')
             .select(
-              'id, receiver_id, profiles!friend_requests_receiver_id_fkey(id, name, avatar), created_at',
+              'id, receiver_id, profiles!friend_requests_receiver_id_fkey(id, username, avatar_url), created_at',
             )
             .eq('sender_id', user.id)
             .eq('status', 'pending');

@@ -45,6 +45,17 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Zego Cloud Permissions -->
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access for video calls</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs microphone access for audio calls</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This app needs local network access for calling features</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_services._udp</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

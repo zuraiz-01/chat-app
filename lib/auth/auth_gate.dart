@@ -1,9 +1,8 @@
 import 'package:chat_app/screens/auth/login_screen.dart';
-import 'package:chat_app/screens/home/home.dart';
 import 'package:chat_app/screens/splash/splash_screen.dart';
+import 'package:chat_app/screens/home/home.dart';
 import 'package:chat_app/service/auth_service.dart';
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthGate extends StatefulWidget {
@@ -41,7 +40,7 @@ class _AuthGateState extends State<AuthGate> {
 
     // 🔹 If already logged in, go to Home
     if (session != null) {
-      return const homeScreen();
+      return const HomeTabScreen();
     }
 
     // 🔹 Otherwise, listen for auth state changes
@@ -60,7 +59,7 @@ class _AuthGateState extends State<AuthGate> {
 
         // If session is active → go Home
         if (session != null) {
-          return const homeScreen();
+          return const HomeTabScreen();
         }
 
         // Else → go to Login screen

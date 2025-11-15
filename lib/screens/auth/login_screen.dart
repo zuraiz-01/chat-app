@@ -1,21 +1,28 @@
 import 'package:chat_app/screens/auth/forgot_password_screen.dart';
 import 'package:chat_app/screens/auth/signup_screen.dart';
-import 'package:chat_app/service/auth_service.dart';
+import 'package:chat_app/screens/home/home.dart';
+import 'package:chat_app/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:icons_plus/icons_plus.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({Key? key}) : super(key: key);
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final AuthService _authService = AuthService();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _supabaseService = SupabaseService();
+  late bool _obscurePassword;
+
+  @override
+  void initState() {
+    super.initState();
+    _obscurePassword = true;
+  }
 
   @override
   void dispose() {
@@ -80,19 +87,35 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 20),
 
                 // Password
-                TextField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    filled: true,
-                    fillColor: Colors.grey.shade100,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
+                StatefulBuilder(
+                  builder: (context, setState) {
+                    return TextField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _obscurePassword = !_obscurePassword;
+                            });
+                          },
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey.shade100,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(30),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    );
+                  },
                 ),
 
                 const SizedBox(height: 10),
@@ -128,7 +151,21 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: () async {
                     final email = _emailController.text.trim();
                     final password = _passwordController.text.trim();
-                    await _authService.signInWithEmailPassword(email, password);
+
+                    if (email.isEmpty || password.isEmpty) {
+                      Get.snackbar('Error', 'Email and password required');
+                      return;
+                    }
+
+                    try {
+                      await _supabaseService.signIn(
+                        email: email,
+                        password: password,
+                      );
+                      Get.offAll(() => const HomeTabScreen());
+                    } catch (e) {
+                      Get.snackbar('Login Error', e.toString());
+                    }
                   },
                   child: const Text(
                     'Login',
@@ -166,10 +203,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     minimumSize: const Size(double.infinity, 55),
                   ),
-                  onPressed: () async {
-                    await _authService.signInWithGoogle();
+                  onPressed: () {
+                    Get.snackbar(
+                      'Coming Soon',
+                      'Google sign-in will be available soon',
+                    );
                   },
-                  icon: Icon(Iconsax.google_bold, color: Colors.red),
+                  icon: const Icon(Icons.g_mobiledata, color: Colors.red),
                   label: Text(
                     "Sign in with Google",
                     style: TextStyle(

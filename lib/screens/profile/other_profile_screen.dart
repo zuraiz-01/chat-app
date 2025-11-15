@@ -63,7 +63,7 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
             .single()
             .catchError((_) => null);
 
-        isFriend.value = friendship != null;
+        isFriend.value = friendship as bool? ?? false;
 
         if (!isFriend.value) {
           // Check outgoing request
@@ -76,7 +76,7 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
               .single()
               .catchError((_) => null);
 
-          hasSentRequest.value = outgoing != null;
+          hasSentRequest.value = outgoing as bool? ?? false;
 
           // Check incoming request
           final incoming = await supabase
@@ -88,7 +88,7 @@ class _OtherProfileScreenState extends State<OtherProfileScreen> {
               .single()
               .catchError((_) => null);
 
-          hasReceivedRequest.value = incoming != null;
+          hasReceivedRequest.value = incoming as bool? ?? false;
         }
       }
     } catch (e) {

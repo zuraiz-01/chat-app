@@ -19,12 +19,14 @@ import 'package:chat_app/screens/settings/help_screen.dart';
 import 'package:chat_app/screens/settings/notifications_settings_screen.dart';
 import 'package:chat_app/screens/settings/privacy_settings_screen.dart';
 import 'package:chat_app/screens/settings/settings_screen.dart';
-import 'package:flutter/material.dart';
+import 'package:chat_app/screens/splash/onboarding_screen.dart';
+import 'package:chat_app/screens/splash/splash_screen.dart';
 import 'package:get/get.dart';
 
 class AppRoutes {
   // 🌐 Route Names
-  static const String home = '/';
+  static const String splash = '/';
+  static const String home = '/home';
   static const String chatList = '/chatList';
   static const String friends = '/friends';
   static const String groups = '/groups';
@@ -44,23 +46,37 @@ class AppRoutes {
   static const String account = '/account';
   static const String chatSettings = '/chatSettings';
   static const String notificationsSettings = '/notificationsSettings';
+  static const String chatlist = '/chatlist';
 
   // 🔐 Auth Routes
   static const String login = '/login';
   static const String signup = '/signup';
   static const String forgotPassword = '/forgotPassword';
+  static const String onboarding = '/onboarding';
 
   // 📄 Route Definitions
   static final routes = [
+    // 🟦 Splash
+    GetPage(name: splash, page: () => const SplashScreen()),
+    GetPage(name: onboarding, page: () => const OnboardingScreen()),
+
     // 🏠 Main App
-    GetPage(name: home, page: () => const homeScreen()),
+    GetPage(name: home, page: () => const HomeTabScreen()),
     GetPage(name: chatList, page: () => const ChatListScreen()),
     GetPage(name: friends, page: () => const FriendsScreen()),
     GetPage(name: groups, page: () => const GroupsScreen()),
     GetPage(name: calls, page: () => const CallLogsScreen()),
 
     // 💬 Chat
-    GetPage(name: chatRoom, page: () => const ChatRoomScreen()),
+    GetPage(
+      name: chatRoom,
+      page: () => ChatRoomScreen(
+        chatId: Get.parameters['chatId'] ?? '',
+        otherUserId: Get.parameters['otherUserId'] ?? '',
+        otherUserName: Get.parameters['otherUserName'] ?? 'Unknown',
+        isVideoCall: Get.parameters['isVideoCall'] == 'true',
+      ),
+    ),
     GetPage(
       name: groupChat,
       page: () => GroupChatScreen(groupId: Get.parameters['groupId']!),
@@ -76,6 +92,7 @@ class AppRoutes {
     // 🔔 Notifications & Search
     GetPage(name: notifications, page: () => const NotificationsScreen()),
     GetPage(name: search, page: () => const SearchScreen()),
+    GetPage(name: chatList, page: () => const ChatListScreen()),
 
     // ⚙️ Settings
     GetPage(name: settings, page: () => const SettingsScreen()),

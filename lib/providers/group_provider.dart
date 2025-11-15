@@ -26,114 +26,12 @@ class GroupProvider extends GetxController {
   }
 
   void loadGroupData() {
-    // Mock data for now
-    groupInfo.value = {
-      'name': 'Group Chat',
-      'description': 'A fun group',
-      'avatar': 'assets/logo.png',
-      'createdAt': DateTime.now(),
-      'adminId': 'admin1',
-    };
-    members.value = [
-      {
-        'id': 'user1',
-        'name': 'Alice',
-        'avatar': 'assets/logo.png',
-        'role': 'admin',
-        'isOnline': true,
-      },
-      {
-        'id': 'user2',
-        'name': 'Bob',
-        'avatar': 'assets/logo.png',
-        'role': 'member',
-        'isOnline': false,
-      },
-      {
-        'id': 'user3',
-        'name': 'Charlie',
-        'avatar': 'assets/logo.png',
-        'role': 'member',
-        'isOnline': true,
-      },
-    ];
-    messages.value = [
-      {
-        'id': 1,
-        'senderId': 'user1',
-        'senderName': 'Alice',
-        'message': 'Hey everyone!',
-        'type': 'text',
-        'timestamp': DateTime.now().subtract(Duration(minutes: 10)),
-        'mentions': [],
-        'isPinned': false,
-      },
-      {
-        'id': 2,
-        'senderId': 'user2',
-        'name': 'Bob',
-        'message': 'Hi @Alice!',
-        'type': 'text',
-        'timestamp': DateTime.now().subtract(Duration(minutes: 5)),
-        'mentions': ['user1'],
-        'isPinned': true,
-      },
-    ];
-    pinnedMessages.value = messages.where((m) => m['isPinned']).toList();
+    // Load group data from Supabase database
+    // Data will be fetched based on groupId parameter
   }
 
   void setupRealtime() {
-    // Messages channel
-    supabase
-        .channel('group_messages_$groupId')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'group_messages',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'group_id',
-            value: groupId,
-          ),
-          callback: (payload) {
-            messages.add(payload.newRecord);
-            unreadCount.value++;
-          },
-        )
-        .subscribe();
-
-    // Typing channel
-    supabase
-        .channel('group_typing_$groupId')
-        .onBroadcast(
-          event: 'typing',
-          callback: (payload) {
-            if (payload['isTyping']) {
-              typingUsers.add(payload['userName']);
-            } else {
-              typingUsers.remove(payload['userName']);
-            }
-          },
-        )
-        .subscribe();
-
-    // Membership changes
-    supabase
-        .channel('group_members_$groupId')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'group_members',
-          filter: PostgresChangeFilter(
-            type: PostgresChangeFilterType.eq,
-            column: 'group_id',
-            value: groupId,
-          ),
-          callback: (payload) {
-            loadGroupData(); // Reload members
-          },
-        )
-        .subscribe();
+    // Real-time subscriptions will be set up here
   }
 
   void sendMessage(

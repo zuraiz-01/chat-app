@@ -34,9 +34,9 @@ class _SearchScreenState extends State<SearchScreen> {
       if (currentUser != null) {
         final results = await supabase
             .from('profiles')
-            .select('id, name, avatar, bio')
+            .select('id, username, avatar_url, full_name')
             .neq('id', currentUser.id)
-            .ilike('name', '%$query%')
+            .ilike('username', '%$query%')
             .limit(20);
 
         // Filter out friends and existing requests
@@ -55,9 +55,9 @@ class _SearchScreenState extends State<SearchScreen> {
             .map(
               (u) => {
                 'id': u['id'],
-                'name': u['name'] ?? 'Unknown',
-                'avatar': u['avatar'] ?? 'assets/logo.png',
-                'bio': u['bio'] ?? '',
+                'name': u['username'] ?? 'Unknown',
+                'avatar': u['avatar_url'] ?? 'assets/logo.png',
+                'bio': u['full_name'] ?? '',
               },
             )
             .toList();

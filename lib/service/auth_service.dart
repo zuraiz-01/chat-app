@@ -1,5 +1,4 @@
 import 'package:chat_app/screens/home/home.dart';
-import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -26,7 +25,7 @@ class AuthService {
 
       Get.snackbar('Success', 'Logged in successfully!');
 
-      Get.offAll(() => const homeScreen());
+      Get.offAll(() => const HomeTabScreen());
     } on AuthException catch (e) {
       Get.snackbar('Auth Error', e.message);
     } catch (e) {
@@ -35,10 +34,14 @@ class AuthService {
   }
 
   // 🟣 Signup with Email/Password
-  Future<void> signUpWithEmailPassword(String email, String password) async {
+  Future<void> signUpWithEmailPassword(
+    String email,
+    String password,
+    String name,
+  ) async {
     try {
-      if (email.isEmpty || password.isEmpty) {
-        Get.snackbar('Error', 'Email and password cannot be empty.');
+      if (email.isEmpty || password.isEmpty || name.isEmpty) {
+        Get.snackbar('Error', 'All fields are required.');
         return;
       }
 
@@ -51,6 +54,13 @@ class AuthService {
         Get.snackbar('Sign Up Failed', 'Something went wrong. Try again.');
         return;
       }
+
+      // Insert profile into database
+      await _supabase.from('profiles').insert({
+        'id': response.user!.id,
+        'username': name.toLowerCase().replaceAll(' ', '_'),
+        'full_name': name,
+      });
 
       Get.snackbar('Success', 'Account created successfully!');
     } on AuthException catch (e) {

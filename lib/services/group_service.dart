@@ -15,7 +15,7 @@ class GroupService {
   Future<List<Map<String, dynamic>>> getGroupMembers(String groupId) async {
     final response = await supabase
         .from('group_members')
-        .select('*, profiles(name, avatar)')
+        .select('*, profiles(username, avatar_url)')
         .eq('group_id', groupId);
     return response;
   }

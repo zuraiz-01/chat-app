@@ -1,429 +1,550 @@
-import 'dart:io';
-import 'dart:typed_data';
+// ---------------------------------------------------------------------------
+// IMPORTS
+// ---------------------------------------------------------------------------
 
+import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:chat_app/routes/app_routes.dart';
+import 'package:chat_app/services/zego_cloud_service.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:get/get.dart';
-import 'package:icons_plus/icons_plus.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+// ---------------------------------------------------------------------------
+// CHAT ROOM SCREEN
+// ---------------------------------------------------------------------------
+
 class ChatRoomScreen extends StatefulWidget {
-  const ChatRoomScreen({super.key});
+  final String chatId;
+  final String otherUserId;
+  final String otherUserName;
+  final bool? isVideoCall;
+
+  const ChatRoomScreen({
+    super.key,
+    required this.chatId,
+    required this.otherUserId,
+    required this.otherUserName,
+    this.isVideoCall,
+  });
 
   @override
   State<ChatRoomScreen> createState() => _ChatRoomScreenState();
 }
 
 class _ChatRoomScreenState extends State<ChatRoomScreen> {
-  final TextEditingController _messageController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-  final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
+  final TextEditingController _msgCtrl = TextEditingController();
+  final ScrollController _scroll = ScrollController();
+  final FlutterSoundRecorder _rec = FlutterSoundRecorder();
   final ImagePicker _picker = ImagePicker();
 
   bool _isRecording = false;
-  bool _showEmojiPicker = false;
-  bool _isTyping = false; // Simulate typing indicator
-  List<Map<String, dynamic>> _messages = []; // Mock messages
+  bool _showEmoji = false;
+  bool _isTyping = false;
+
+  List<Map<String, dynamic>> _messages = [];
+  List<Map<String, dynamic>> _participants = [];
+
+  final _supabase = Supabase.instance.client;
+  final ZegoCloudService _zego = ZegoCloudService();
+
+  late RealtimeChannel _msgChannel;
+  late RealtimeChannel _typingChannel;
+
+  // ---------------------------------------------------------------------------
+  // INIT
+  // ---------------------------------------------------------------------------
 
   @override
   void initState() {
     super.initState();
     _initRecorder();
+    _loadParticipants();
     _loadMessages();
-    _setupRealtime();
+    _listenToMessages(); // FIXED
+    _listenToTyping(); // FIXED
+    _initCallIfNeeded();
   }
 
   Future<void> _initRecorder() async {
-    await _recorder.openRecorder();
+    await _rec.openRecorder();
   }
 
-  void _loadMessages() {
-    // Mock data
-    _messages = [
-      {
-        'id': 1,
-        'sender': 'friend',
-        'message': 'Hey there!',
-        'timestamp': DateTime.now().subtract(const Duration(minutes: 5)),
-        'type': 'text',
-      },
-      {
-        'id': 2,
-        'sender': 'me',
-        'message': 'Hi! How are you?',
-        'timestamp': DateTime.now().subtract(const Duration(minutes: 3)),
-        'type': 'text',
-      },
-    ];
-  }
+  // ---------------------------------------------------------------------------
+  // LOAD CHAT PARTICIPANTS
+  // ---------------------------------------------------------------------------
 
-  void _setupRealtime() {
-    // Supabase realtime for messages and typing
-    Supabase.instance.client
-        .channel('messages')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'messages',
-          callback: (payload) {
-            // Handle new message
-            setState(() {
-              _messages.add(payload.newRecord);
-            });
-          },
-        )
-        .subscribe();
+  Future<void> _loadParticipants() async {
+    try {
+      final result = await _supabase
+          .from('chat_participants')
+          .select('*, profiles(id, username, avatar_url)')
+          .eq('chat_id', widget.chatId);
 
-    Supabase.instance.client
-        .channel('typing')
-        .onBroadcast(
-          event: 'typing',
-          callback: (payload) {
-            setState(() {
-              _isTyping = payload['isTyping'];
-            });
-          },
-        )
-        .subscribe();
-  }
-
-  void _sendMessage(String message, {String type = 'text'}) {
-    final newMessage = {
-      'sender': 'me',
-      'message': message,
-      'timestamp': DateTime.now(),
-      'type': type,
-    };
-    setState(() {
-      _messages.add(newMessage);
-    });
-    // Insert to Supabase
-    Supabase.instance.client.from('messages').insert(newMessage);
-    _scrollToBottom();
-  }
-
-  void _scrollToBottom() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    });
-  }
-
-  Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      // Upload to Supabase Storage and send message
-      final fileName = 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final file = File(image.path);
-      await Supabase.instance.client.storage
-          .from('media')
-          .upload(fileName, file);
-      final url = Supabase.instance.client.storage
-          .from('media')
-          .getPublicUrl(fileName);
-      _sendMessage(url, type: 'image');
+      setState(() => _participants = List<Map<String, dynamic>>.from(result));
+    } catch (e) {
+      debugPrint('Error loading participants: $e');
     }
   }
 
-  Future<void> _startRecording() async {
-    await _recorder.startRecorder(toFile: 'voice.aac');
+  // ---------------------------------------------------------------------------
+  // LOAD CHAT MESSAGES
+  // ---------------------------------------------------------------------------
+
+  Future<void> _loadMessages() async {
+    try {
+      final result = await _supabase
+          .from('messages')
+          .select('*, profiles(id, username, avatar_url)')
+          .eq('chat_id', widget.chatId)
+          .order('created_at', ascending: true);
+
+      setState(() => _messages = List<Map<String, dynamic>>.from(result));
+      _scrollToBottom();
+    } catch (e) {
+      debugPrint('Error loading messages: $e');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // REALTIME MESSAGE LISTENER — FULL FIXED
+  // ---------------------------------------------------------------------------
+
+  // void _listenToMessages() {
+  //   _msgChannel = _supabase.channel(
+  //     'public:messages:chat_id=eq.${widget.chatId}', // Listen to messages for a specific chat
+  //   );
+
+  //   _msgChannel.onPostgresChanges(
+  //     event: PostgresChangeEvent.insert, // Listen for insert events
+  //     schema: 'public', // Target schema
+  //     table: 'messages', // Target table
+  //     callback: (payload) async {
+  //       if (!mounted) return;
+
+  //       final data = payload.newRecord;
+  //       if (data == null) return;
+
+  //       // Only process if the message belongs to the current chat
+  //       if (data['chat_id'] != widget.chatId) return;
+
+  //       final newMsg = Map<String, dynamic>.from(data);
+
+  //       // Attach profile to message (Fetch the sender's profile)
+  //       final profile = await _supabase
+  //           .from('profiles')
+  //           .select()
+  //           .eq('id', newMsg['sender_id'])
+  //           .maybeSingle();
+
+  //       if (profile != null) {
+  //         newMsg['profiles'] = profile;
+  //       }
+
+  //       // Update the state with the new message
+  //       setState(() {
+  //         // _messages.add(newMsg);
+  //         _messages.insert(
+  //           0,
+  //           newMsg,
+  //         ); // Add the new message at the start of the list (or use .add() for end)
+  //       });
+
+  //       // Scroll to the bottom of the list after adding a new message
+  //       _scrollToBottom();
+  //     },
+  //   );
+
+  //   // Subscribe to the channel to start listening
+  //   _msgChannel.subscribe();
+  // }
+  void _listenToMessages() {
+    _msgChannel = _supabase.channel(
+      'public:messages:chat_id=eq.${widget.chatId}', // Listen to messages for a specific chat
+    );
+
+    _msgChannel.onPostgresChanges(
+      event: PostgresChangeEvent.insert, // Listen for insert events
+      schema: 'public', // Target schema
+      table: 'messages', // Target table
+      callback: (payload) async {
+        if (!mounted) return;
+
+        final data = payload.newRecord;
+        if (data == null) return;
+
+        // Only process if the message belongs to the current chat
+        if (data['chat_id'] != widget.chatId) return;
+
+        final newMsg = Map<String, dynamic>.from(data);
+
+        // Attach profile to message (Fetch the sender's profile)
+        final profile = await _supabase
+            .from('profiles')
+            .select()
+            .eq('id', newMsg['sender_id'])
+            .maybeSingle();
+
+        if (profile != null) {
+          newMsg['profiles'] = profile;
+        }
+
+        // Update the state with the new message
+        WidgetsBinding.instance?.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _messages.add(newMsg);
+              // _messages.insert(
+              //   0,
+              //   newMsg,
+              // ); // Add the new message at the start of the list
+            });
+            _scrollToBottom(); // Scroll to bottom after adding the new message
+          }
+        });
+      },
+    );
+
+    // Subscribe to the channel to start listening
+    _msgChannel.subscribe();
+  }
+
+  // ---------------------------------------------------------------------------
+  // REALTIME TYPING — FIXED & IMPROVED
+  // ---------------------------------------------------------------------------
+
+  void _listenToTyping() {
+    _typingChannel = _supabase.channel("typing_${widget.chatId}");
+
+    _typingChannel.onBroadcast(
+      event: 'typing',
+      callback: (payload) {
+        if (!mounted) return;
+        if (payload['chat_id'] != widget.chatId) return;
+
+        bool isTypingNow = payload['isTyping'] == true;
+
+        setState(() => _isTyping = isTypingNow);
+
+        /// If typing stops, scroll to bottom
+        if (!isTypingNow) _scrollToBottom();
+      },
+    );
+
+    _typingChannel.subscribe();
+  }
+
+  void _sendTyping(bool isTyping) async {
+    await RefreshLocalizations;
+    _typingChannel.sendBroadcastMessage(
+      event: 'typing',
+      payload: {'chat_id': widget.chatId, 'isTyping': isTyping},
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // SEND MESSAGE
+  // ---------------------------------------------------------------------------
+
+  Future<void> _sendMessage(String text) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    final msg = {
+      'chat_id': widget.chatId,
+      'sender_id': user.id,
+      'content': text,
+      'message_type': 'text',
+      'media_url': null,
+      'is_read': false,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'profiles': {'id': user.id, 'username': user.email, 'avatar_url': null},
+    };
+
     setState(() {
-      _isRecording = true;
+      _messages.add(msg);
+      _scrollToBottom();
     });
+
+    _msgCtrl.clear();
+
+    await _supabase.from('messages').insert({
+      'chat_id': widget.chatId,
+      'sender_id': user.id,
+      'content': text,
+      'message_type': 'text',
+      'media_url': null,
+      'is_read': false,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    _sendTyping(false);
+  }
+
+  // ---------------------------------------------------------------------------
+  // SCROLL TO BOTTOM
+  // ---------------------------------------------------------------------------
+
+  void _scrollToBottom() {
+    Future.delayed(const Duration(milliseconds: 80), () {
+      if (_scroll.hasClients) {
+        _scroll.animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // PICK IMAGE
+  // ---------------------------------------------------------------------------
+
+  Future<void> _pickImage() async {
+    final img = await _picker.pickImage(source: ImageSource.gallery);
+    if (img == null) return;
+
+    final file = File(img.path);
+    final fileName = 'img_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+    await _supabase.storage.from('media').upload(fileName, file);
+    final publicUrl = _supabase.storage.from('media').getPublicUrl(fileName);
+
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    final msg = {
+      'chat_id': widget.chatId,
+      'sender_id': user.id,
+      'content': null,
+      'message_type': 'image',
+      'media_url': publicUrl,
+      'is_read': false,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'profiles': {'id': user.id, 'username': user.email, 'avatar_url': null},
+    };
+
+    setState(() {
+      _messages.add(msg);
+      _scrollToBottom();
+    });
+
+    await _supabase.from('messages').insert(msg);
+  }
+
+  // ---------------------------------------------------------------------------
+  // VOICE RECORD
+  // ---------------------------------------------------------------------------
+
+  Future<void> _startRecording() async {
+    await _rec.startRecorder(toFile: 'voice.aac');
+    setState(() => _isRecording = true);
   }
 
   Future<void> _stopRecording() async {
-    final path = await _recorder.stopRecorder();
+    final path = await _rec.stopRecorder();
+    setState(() => _isRecording = false);
+
+    if (path == null) return;
+
+    final user = _supabase.auth.currentUser!;
+    final file = File(path);
+    final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.aac';
+
+    await _supabase.storage.from('media').upload(fileName, file);
+    final url = _supabase.storage.from('media').getPublicUrl(fileName);
+
+    final msg = {
+      'chat_id': widget.chatId,
+      'sender_id': user.id,
+      'content': null,
+      'message_type': 'voice',
+      'media_url': url,
+      'is_read': false,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'profiles': {'id': user.id, 'username': user.email, 'avatar_url': null},
+    };
+
     setState(() {
-      _isRecording = false;
+      _messages.add(msg);
+      _scrollToBottom();
     });
-    if (path != null) {
-      // Upload voice note
-      final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.aac';
-      final file = File(path);
-      await Supabase.instance.client.storage
-          .from('media')
-          .upload(fileName, file);
-      final url = Supabase.instance.client.storage
-          .from('media')
-          .getPublicUrl(fileName);
-      _sendMessage(url, type: 'voice');
+
+    await _supabase.from('messages').insert(msg);
+  }
+
+  // ---------------------------------------------------------------------------
+  // INIT VIDEO CALL
+  // ---------------------------------------------------------------------------
+
+  Future<void> _initCallIfNeeded() async {
+    if (widget.isVideoCall == true) {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        await _zego.initZegoCloud(user.id, user.email ?? "User");
+      }
     }
   }
 
-  void _toggleEmojiPicker() {
-    setState(() {
-      _showEmojiPicker = !_showEmojiPicker;
-    });
-  }
+  // ---------------------------------------------------------------------------
+  // DISPOSE
+  // ---------------------------------------------------------------------------
 
   @override
   void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
-    _recorder.closeRecorder();
+    _msgCtrl.dispose();
+    _scroll.dispose();
+    _rec.closeRecorder();
+    _supabase.removeChannel(_msgChannel);
+    _supabase.removeChannel(_typingChannel);
     super.dispose();
   }
+
+  // ---------------------------------------------------------------------------
+  // UI
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, size: 20.sp),
-          onPressed: () => Get.back(),
-        ),
-        title: Row(
-          children: [
-            Stack(
-              children: [
-                CircleAvatar(
-                  radius: 18.sp,
-                  backgroundImage: const AssetImage('assets/logo.png'),
-                ),
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    width: 10.sp,
-                    height: 10.sp,
-                    decoration: const BoxDecoration(
-                      color: Colors.green,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-              ],
+      appBar: _buildAppBar(),
+      body: Column(
+        children: [
+          Expanded(child: _buildMessageList()),
+          if (_showEmoji)
+            SizedBox(
+              height: 260,
+              child: EmojiPicker(
+                onEmojiSelected: (cat, emoji) {
+                  _msgCtrl.text += emoji.emoji;
+                },
+              ),
             ),
-            SizedBox(width: 8.sp),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Friend Name',
-                  style: TextStyle(
-                    fontSize: 16.sp,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).primaryColor,
-                  ),
-                ),
-                Text(
-                  'Online',
-                  style: TextStyle(fontSize: 12.sp, color: Colors.grey),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.call, size: 20.sp),
-            onPressed: () => Get.toNamed('/call/audio/1'), // Assume userId 1
-          ),
-          IconButton(
-            icon: Icon(Icons.videocam, size: 20.sp),
-            onPressed: () => Get.toNamed('/call/video/1'),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              // Handle menu actions
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'block', child: Text('Block')),
-              const PopupMenuItem(value: 'report', child: Text('Report')),
-              const PopupMenuItem(value: 'clear', child: Text('Clear Chat')),
-            ],
-            icon: Icon(Icons.more_vert, size: 20.sp),
-          ),
+          _buildInputBar(),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.white, Color(0xFFF5F5F5)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Column(
-          children: [
-            Expanded(
-              child: _messages.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Say hi 👋',
-                        style: TextStyle(fontSize: 16.sp, color: Colors.grey),
-                      ),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      reverse: true,
-                      padding: EdgeInsets.all(12.sp),
-                      itemCount: _messages.length + (_isTyping ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (_isTyping && index == 0) {
-                          return _buildTypingIndicator();
-                        }
-                        final message = _messages[_messages.length - 1 - index];
-                        return _buildMessageBubble(message);
-                      },
-                    ),
-            ),
-            if (_showEmojiPicker)
-              SizedBox(
-                height: 250.sp,
-                child: EmojiPicker(
-                  onEmojiSelected: (category, emoji) {
-                    _messageController.text += emoji.emoji;
-                  },
-                ),
-              ),
-            _buildMessageInput(),
-          ],
-        ),
-      ),
     );
   }
 
-  Widget _buildTypingIndicator() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: EdgeInsets.symmetric(vertical: 4.sp),
-        padding: EdgeInsets.all(12.sp),
-        decoration: BoxDecoration(
-          color: Colors.grey[200],
-          borderRadius: BorderRadius.circular(18.sp),
+  AppBar _buildAppBar() {
+    return AppBar(
+      title: Text(widget.otherUserName),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.videocam),
+          onPressed: () {
+            Get.toNamed(
+              '/chatRoom',
+              parameters: {
+                'chatId': widget.chatId,
+                'otherUserId': widget.otherUserId,
+                'otherUserName': widget.otherUserName,
+                'isVideoCall': 'true',
+              },
+            );
+          },
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'typing...',
-              style: TextStyle(fontSize: 14.sp, color: Colors.grey),
-            ),
-            SizedBox(width: 8.sp),
-            SizedBox(
-              width: 20.sp,
-              height: 10.sp,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: 3,
-                itemBuilder: (context, i) =>
-                    Container(
-                          width: 4.sp,
-                          height: 4.sp,
-                          margin: EdgeInsets.symmetric(horizontal: 1.sp),
-                          decoration: const BoxDecoration(
-                            color: Colors.grey,
-                            shape: BoxShape.circle,
-                          ),
-                        )
-                        .animate(onPlay: (controller) => controller.repeat())
-                        .fadeIn(
-                          duration: 500.ms,
-                          delay: Duration(milliseconds: i * 200),
-                        )
-                        .fadeOut(duration: 500.ms),
-              ),
-            ),
-          ],
-        ),
-      ),
+      ],
     );
   }
 
-  Widget _buildMessageBubble(Map<String, dynamic> message) {
-    final isMe = message['sender'] == 'me';
+  Widget _buildMessageList() {
+    return ListView.builder(
+      controller: _scroll,
+      padding: EdgeInsets.all(12.sp),
+      itemCount: _messages.length + (_isTyping ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (_isTyping && index == _messages.length) {
+          return _typingIndicator();
+        }
+        return _buildMessageBubble(_messages[index]);
+      },
+    );
+  }
+
+  Widget _typingIndicator() {
+    return const Padding(
+      padding: EdgeInsets.all(8),
+      child: Text("typing...", style: TextStyle(color: Colors.grey)),
+    );
+  }
+
+  Widget _buildMessageBubble(Map<String, dynamic> msg) {
+    final isMe = msg['sender_id'] == _supabase.auth.currentUser?.id;
+
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: EdgeInsets.symmetric(vertical: 4.sp),
-        padding: EdgeInsets.all(12.sp),
-        constraints: BoxConstraints(maxWidth: 70.w),
+        margin: EdgeInsets.symmetric(vertical: 5.sp),
+        padding: EdgeInsets.all(10.sp),
         decoration: BoxDecoration(
-          color: isMe ? Theme.of(context).primaryColor : Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(18.sp),
-            topRight: Radius.circular(18.sp),
-            bottomLeft: isMe ? Radius.circular(18.sp) : Radius.zero,
-            bottomRight: isMe ? Radius.zero : Radius.circular(18.sp),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 4.sp,
-              offset: Offset(0, 2.sp),
-            ),
-          ],
+          color: isMe ? Colors.blue : Colors.white,
+          borderRadius: BorderRadius.circular(12.sp),
         ),
-        child: message['type'] == 'text'
-            ? Text(
-                message['message'] ?? '',
-                style: TextStyle(
-                  fontSize: 14.sp,
-                  color: isMe ? Colors.white : Colors.black,
-                ),
-              )
-            : message['type'] == 'image'
-            ? CachedNetworkImage(
-                imageUrl: message['message'] ?? '',
-                width: 200.sp,
-                height: 200.sp,
-                fit: BoxFit.cover,
-                placeholder: (context, url) =>
-                    const CircularProgressIndicator(),
-                errorWidget: (context, url, error) => const Icon(Icons.error),
-              )
-            : IconButton(
-                icon: Icon(Icons.play_arrow, size: 30.sp),
-                onPressed: () {
-                  // Play voice note
-                },
-              ),
-      ).animate().fadeIn(duration: 300.ms),
+        child: _renderMessageContent(msg, isMe),
+      ),
     );
   }
 
-  Widget _buildMessageInput() {
+  Widget _renderMessageContent(Map<String, dynamic> msg, bool isMe) {
+    switch (msg['message_type']) {
+      case 'image':
+        return CachedNetworkImage(
+          imageUrl: msg['media_url'],
+          width: 50.w,
+          height: 30.h,
+          fit: BoxFit.cover,
+        );
+
+      case 'voice':
+        return IconButton(
+          icon: Icon(
+            Icons.play_circle,
+            size: 26.sp,
+            color: isMe ? Colors.white : Colors.black,
+          ),
+          onPressed: () {},
+        );
+
+      default:
+        return Text(
+          msg['content'] ?? '',
+          style: TextStyle(
+            color: isMe ? Colors.white : Colors.black,
+            fontSize: 15.sp,
+          ),
+        );
+    }
+  }
+
+  Widget _buildInputBar() {
     return SafeArea(
       child: Container(
         padding: EdgeInsets.all(12.sp),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(top: BorderSide(color: Colors.grey, width: 0.5)),
-        ),
         child: Row(
           children: [
             IconButton(
-              icon: Icon(Icons.emoji_emotions, size: 20.sp),
-              onPressed: _toggleEmojiPicker,
+              icon: const Icon(Icons.emoji_emotions),
+              onPressed: () {
+                setState(() => _showEmoji = !_showEmoji);
+              },
             ),
             Expanded(
               child: TextField(
-                controller: _messageController,
+                controller: _msgCtrl,
+                onChanged: (val) => _sendTyping(val.isNotEmpty),
                 decoration: InputDecoration(
-                  hintText: 'Type a message...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(25.sp),
-                    borderSide: BorderSide.none,
-                  ),
                   filled: true,
-                  fillColor: Colors.grey[100],
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 16.sp,
-                    vertical: 10.sp,
+                  fillColor: Colors.grey[200],
+                  hintText: "Message",
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(22.sp),
+                    borderSide: BorderSide.none,
                   ),
                 ),
               ),
@@ -431,22 +552,19 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             IconButton(
               icon: Icon(
                 _isRecording ? Icons.stop : Icons.mic,
-                size: 20.sp,
                 color: _isRecording ? Colors.red : null,
               ),
               onPressed: _isRecording ? _stopRecording : _startRecording,
-              onLongPress: _startRecording,
             ),
             IconButton(
-              icon: Icon(Icons.attach_file, size: 20.sp),
+              icon: const Icon(Icons.attach_file),
               onPressed: _pickImage,
             ),
             IconButton(
-              icon: Icon(Icons.send, size: 20.sp),
+              icon: const Icon(Icons.send),
               onPressed: () {
-                if (_messageController.text.isNotEmpty) {
-                  _sendMessage(_messageController.text);
-                  _messageController.clear();
+                if (_msgCtrl.text.trim().isNotEmpty) {
+                  _sendMessage(_msgCtrl.text.trim());
                 }
               },
             ),

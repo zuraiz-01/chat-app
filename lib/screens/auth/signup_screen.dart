@@ -127,7 +127,11 @@ class _SignupScreenState extends State<SignupScreen> {
                     final name = _nameController.text.trim();
                     final email = _emailController.text.trim();
                     final password = _passwordController.text.trim();
-                    await _authService.signUpWithEmailPassword(email, password);
+                    await _authService.signUpWithEmailPassword(
+                      email,
+                      password,
+                      name,
+                    );
                     if (!mounted) return;
                     Get.off(() => const LoginScreen());
                   },
