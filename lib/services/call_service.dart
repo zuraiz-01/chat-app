@@ -11,18 +11,18 @@ class CallService {
 
   CallService._internal();
 
-  // Add call log
+  // Add call log (NEW APPROACH)
   Future<void> addCallLog({
-    required String initiatorId,
-    required String recipientId,
+    required String chatId,
+    required String userId,
     required int duration,
     required String callType,
     required bool missed,
   }) async {
     try {
       await _supabaseService.addCallLog(
-        initiatorId: initiatorId,
-        recipientId: recipientId,
+        chatId: chatId,
+        userId: userId,
         duration: duration,
         callType: callType,
         missed: missed,
@@ -33,27 +33,32 @@ class CallService {
     }
   }
 
-  // Get call logs
-  Future<List<Map<String, dynamic>>> getCallLogs(String userId) async {
+  // Get logs by chatId
+  Future<List<Map<String, dynamic>>> getCallLogs(String chatId) async {
     try {
-      return await _supabaseService.getCallLogs(userId);
+      return await _supabaseService.getCallLogs(chatId);
     } catch (e) {
       Get.snackbar('Error', 'Failed to load call logs: $e');
       rethrow;
     }
   }
 
-  // Stream call logs
-  Stream<List<Map<String, dynamic>>> getCallLogsStream(String userId) {
-    return _supabaseService.getCallLogsStream(userId);
+  // Stream logs by chatId
+  Stream<List<Map<String, dynamic>>> getCallLogsStream(String chatId) {
+    return _supabaseService.getCallLogsStream(chatId);
   }
 
-  // Calculate call duration
+  // Stream all call logs for the user
+  Stream<List<Map<String, dynamic>>> getAllCallLogsStream() {
+    return _supabaseService.getAllCallLogsStream();
+  }
+
+  // Duration calculator
   int calculateDuration(DateTime startTime, DateTime endTime) {
     return endTime.difference(startTime).inSeconds;
   }
 
-  // Get call duration formatted
+  // Format seconds as text
   String getFormattedDuration(int seconds) {
     final hours = seconds ~/ 3600;
     final minutes = (seconds % 3600) ~/ 60;

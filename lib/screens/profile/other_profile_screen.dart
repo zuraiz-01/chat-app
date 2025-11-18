@@ -17,7 +17,7 @@ class OtherProfileScreen extends StatefulWidget {
 }
 
 class _OtherProfileScreenState extends State<OtherProfileScreen> {
-  final FriendProvider friendProvider = Get.put(FriendProvider());
+  final FriendProvider friendProvider = Get.find<FriendProvider>();
   final UserProvider userProvider = Get.put(UserProvider());
 
   var userData = {}.obs;

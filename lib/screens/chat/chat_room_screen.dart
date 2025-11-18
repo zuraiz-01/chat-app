@@ -4,12 +4,15 @@
 
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:chat_app/providers/call_provider.dart';
+import 'package:chat_app/service/auth_service.dart';
 import 'package:chat_app/services/zego_cloud_service.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -49,11 +52,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   List<Map<String, dynamic>> _messages = [];
   List<Map<String, dynamic>> _participants = [];
 
-  final _supabase = Supabase.instance.client;
+  final _supabase = Get.find<AuthService>().supabase;
   final ZegoCloudService _zego = ZegoCloudService();
 
-  late RealtimeChannel _msgChannel;
-  late RealtimeChannel _typingChannel;
+  late RealtimeChannel? _msgChannel;
+  late RealtimeChannel? _typingChannel;
 
   // ---------------------------------------------------------------------------
   // INIT
@@ -81,11 +84,13 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   Future<void> _loadParticipants() async {
     try {
       final result = await _supabase
-          .from('chat_participants')
+          ?.from('chat_participants')
           .select('*, profiles(id, username, avatar_url)')
           .eq('chat_id', widget.chatId);
 
-      setState(() => _participants = List<Map<String, dynamic>>.from(result));
+      setState(
+        () => _participants = List<Map<String, dynamic>>.from(result ?? []),
+      );
     } catch (e) {
       debugPrint('Error loading participants: $e');
     }
@@ -98,12 +103,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   Future<void> _loadMessages() async {
     try {
       final result = await _supabase
-          .from('messages')
+          ?.from('messages')
           .select('*, profiles(id, username, avatar_url)')
           .eq('chat_id', widget.chatId)
           .order('created_at', ascending: true);
 
-      setState(() => _messages = List<Map<String, dynamic>>.from(result));
+      setState(() => _messages = List<Map<String, dynamic>>.from(result ?? []));
       _scrollToBottom();
     } catch (e) {
       debugPrint('Error loading messages: $e');
@@ -163,11 +168,11 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   //   _msgChannel.subscribe();
   // }
   void _listenToMessages() {
-    _msgChannel = _supabase.channel(
+    _msgChannel = _supabase?.channel(
       'public:messages:chat_id=eq.${widget.chatId}', // Listen to messages for a specific chat
     );
 
-    _msgChannel.onPostgresChanges(
+    _msgChannel?.onPostgresChanges(
       event: PostgresChangeEvent.insert, // Listen for insert events
       schema: 'public', // Target schema
       table: 'messages', // Target table
@@ -184,7 +189,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
 
         // Attach profile to message (Fetch the sender's profile)
         final profile = await _supabase
-            .from('profiles')
+            ?.from('profiles')
             .select()
             .eq('id', newMsg['sender_id'])
             .maybeSingle();
@@ -193,24 +198,33 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
           newMsg['profiles'] = profile;
         }
 
-        // Update the state with the new message
-        WidgetsBinding.instance?.addPostFrameCallback((_) {
-          if (mounted) {
-            setState(() {
-              _messages.add(newMsg);
-              // _messages.insert(
-              //   0,
-              //   newMsg,
-              // ); // Add the new message at the start of the list
-            });
-            _scrollToBottom(); // Scroll to bottom after adding the new message
-          }
-        });
+        // Update the state with the new message (check for duplicates)
+        bool isDuplicate = _messages.any(
+          (msg) =>
+              msg['content'] == newMsg['content'] &&
+              msg['sender_id'] == newMsg['sender_id'] &&
+              msg['created_at'] == newMsg['created_at'],
+        );
+
+        if (!isDuplicate) {
+          WidgetsBinding.instance?.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _messages.add(newMsg);
+                // _messages.insert(
+                //   0,
+                //   newMsg,
+                // ); // Add the new message at the start of the list
+              });
+              _scrollToBottom(); // Scroll to bottom after adding the new message
+            }
+          });
+        }
       },
     );
 
     // Subscribe to the channel to start listening
-    _msgChannel.subscribe();
+    _msgChannel?.subscribe();
   }
 
   // ---------------------------------------------------------------------------
@@ -218,9 +232,9 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   // ---------------------------------------------------------------------------
 
   void _listenToTyping() {
-    _typingChannel = _supabase.channel("typing_${widget.chatId}");
+    _typingChannel = _supabase?.channel("typing_${widget.chatId}");
 
-    _typingChannel.onBroadcast(
+    _typingChannel?.onBroadcast(
       event: 'typing',
       callback: (payload) {
         if (!mounted) return;
@@ -235,12 +249,12 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
       },
     );
 
-    _typingChannel.subscribe();
+    _typingChannel?.subscribe();
   }
 
   void _sendTyping(bool isTyping) async {
     await RefreshLocalizations;
-    _typingChannel.sendBroadcastMessage(
+    _typingChannel?.sendBroadcastMessage(
       event: 'typing',
       payload: {'chat_id': widget.chatId, 'isTyping': isTyping},
     );
@@ -251,38 +265,46 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   // ---------------------------------------------------------------------------
 
   Future<void> _sendMessage(String text) async {
-    final user = _supabase.auth.currentUser;
-    if (user == null) return;
+    try {
+      final user = _supabase?.auth.currentUser;
+      if (user == null) return;
 
-    final msg = {
-      'chat_id': widget.chatId,
-      'sender_id': user.id,
-      'content': text,
-      'message_type': 'text',
-      'media_url': null,
-      'is_read': false,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-      'profiles': {'id': user.id, 'username': user.email, 'avatar_url': null},
-    };
+      final msg = {
+        'chat_id': widget.chatId,
+        'sender_id': user.id,
+        'content': text,
+        'message_type': 'text',
+        'media_url': null,
+        'is_read': false,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+        'profiles': {'id': user.id, 'username': user.email, 'avatar_url': null},
+      };
 
-    setState(() {
-      _messages.add(msg);
-      _scrollToBottom();
-    });
+      setState(() {
+        _messages.add(msg);
+        _scrollToBottom();
+      });
 
-    _msgCtrl.clear();
+      _msgCtrl.clear();
 
-    await _supabase.from('messages').insert({
-      'chat_id': widget.chatId,
-      'sender_id': user.id,
-      'content': text,
-      'message_type': 'text',
-      'media_url': null,
-      'is_read': false,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-    });
+      await _supabase?.from('messages').insert({
+        'chat_id': widget.chatId,
+        'sender_id': user.id,
+        'content': text,
+        'message_type': 'text',
+        'media_url': null,
+        'is_read': false,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
 
-    _sendTyping(false);
+      _sendTyping(false);
+
+      // Show success message
+      Get.snackbar('Success', 'Message sent successfully');
+    } catch (e) {
+      debugPrint('Error sending message: $e');
+      Get.snackbar('Error', 'Failed to send message: $e');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -306,35 +328,60 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   // ---------------------------------------------------------------------------
 
   Future<void> _pickImage() async {
-    final img = await _picker.pickImage(source: ImageSource.gallery);
-    if (img == null) return;
+    try {
+      final img = await _picker.pickImage(source: ImageSource.gallery);
+      if (img == null) return;
 
-    final file = File(img.path);
-    final fileName = 'img_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final file = File(img.path);
+      final fileName = 'img_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
-    await _supabase.storage.from('media').upload(fileName, file);
-    final publicUrl = _supabase.storage.from('media').getPublicUrl(fileName);
+      // Upload to Supabase storage (use 'profile_image' bucket as per Supabase setup)
+      await _supabase?.storage.from('profile_image').upload(fileName, file);
 
-    final user = _supabase.auth.currentUser;
-    if (user == null) return;
+      // Get public URL
+      final publicUrl = _supabase?.storage
+          .from('profile_image')
+          .getPublicUrl(fileName);
 
-    final msg = {
-      'chat_id': widget.chatId,
-      'sender_id': user.id,
-      'content': null,
-      'message_type': 'image',
-      'media_url': publicUrl,
-      'is_read': false,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-      'profiles': {'id': user.id, 'username': user.email, 'avatar_url': null},
-    };
+      final user = _supabase?.auth.currentUser;
+      if (user == null) return;
 
-    setState(() {
-      _messages.add(msg);
-      _scrollToBottom();
-    });
+      final msg = {
+        'chat_id': widget.chatId,
+        'sender_id': user.id,
+        'content': null,
+        'message_type': 'image',
+        'media_url': publicUrl,
+        'is_read': false,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+        'profiles': {'id': user.id, 'username': user.email, 'avatar_url': null},
+      };
 
-    await _supabase.from('messages').insert(msg);
+      // Add to local messages list
+      setState(() {
+        _messages.add(msg);
+        _scrollToBottom();
+      });
+
+      // Insert into database (without profiles field)
+      final dbMsg = {
+        'chat_id': widget.chatId,
+        'sender_id': user.id,
+        'content': '', // Empty string instead of null for content column
+        'message_type': 'image',
+        'media_url': publicUrl,
+        'is_read': false,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      };
+
+      await _supabase?.from('messages').insert(dbMsg);
+
+      // Show success message
+      Get.snackbar('Success', 'Image sent successfully');
+    } catch (e) {
+      debugPrint('Error sending image: $e');
+      Get.snackbar('Error', 'Failed to send image: $e');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -342,52 +389,148 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   // ---------------------------------------------------------------------------
 
   Future<void> _startRecording() async {
-    await _rec.startRecorder(toFile: 'voice.aac');
-    setState(() => _isRecording = true);
+    try {
+      // Request microphone permission
+      var status = await Permission.microphone.request();
+      if (status != PermissionStatus.granted) {
+        Get.snackbar(
+          'Permission Denied',
+          'Microphone permission is required for voice messages',
+        );
+        return;
+      }
+
+      await _rec.startRecorder(toFile: 'voice.aac');
+      setState(() => _isRecording = true);
+    } catch (e) {
+      debugPrint('Error starting recording: $e');
+      Get.snackbar('Error', 'Failed to start recording: $e');
+    }
   }
 
   Future<void> _stopRecording() async {
-    final path = await _rec.stopRecorder();
-    setState(() => _isRecording = false);
+    try {
+      final path = await _rec.stopRecorder();
+      setState(() => _isRecording = false);
 
-    if (path == null) return;
+      if (path == null) return;
 
-    final user = _supabase.auth.currentUser!;
-    final file = File(path);
-    final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.aac';
+      final user = _supabase?.auth.currentUser;
+      if (user == null) return;
 
-    await _supabase.storage.from('media').upload(fileName, file);
-    final url = _supabase.storage.from('media').getPublicUrl(fileName);
+      final file = File(path);
+      final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.aac';
 
-    final msg = {
-      'chat_id': widget.chatId,
-      'sender_id': user.id,
-      'content': null,
-      'message_type': 'voice',
-      'media_url': url,
-      'is_read': false,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-      'profiles': {'id': user.id, 'username': user.email, 'avatar_url': null},
-    };
+      // Upload to Supabase storage
+      await _supabase?.storage.from('profile_image').upload(fileName, file);
 
-    setState(() {
-      _messages.add(msg);
-      _scrollToBottom();
-    });
+      // Get public URL
+      final url = _supabase?.storage
+          .from('profile_image')
+          .getPublicUrl(fileName);
 
-    await _supabase.from('messages').insert(msg);
+      final msg = {
+        'chat_id': widget.chatId,
+        'sender_id': user.id,
+        'content': '',
+        'message_type': 'audio',
+        'media_url': url,
+        'is_read': false,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+        'profiles': {'id': user.id, 'username': user.email, 'avatar_url': null},
+      };
+
+      // Add to local messages list
+      setState(() {
+        _messages.add(msg);
+        _scrollToBottom();
+      });
+
+      // Insert into database (without profiles field)
+      final dbMsg = {
+        'chat_id': widget.chatId,
+        'sender_id': user.id,
+        'content': '', // Empty string instead of null for content column
+        'message_type': 'audio',
+        'media_url': url,
+        'is_read': false,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      };
+
+      await _supabase?.from('messages').insert(dbMsg);
+
+      // Show success message
+      Get.snackbar('Success', 'Voice message sent successfully');
+    } catch (e) {
+      debugPrint('Error sending voice message: $e');
+      Get.snackbar('Error', 'Failed to send voice message: $e');
+    }
   }
 
   // ---------------------------------------------------------------------------
   // INIT VIDEO CALL
   // ---------------------------------------------------------------------------
-
   Future<void> _initCallIfNeeded() async {
-    if (widget.isVideoCall == true) {
-      final user = _supabase.auth.currentUser;
-      if (user != null) {
-        await _zego.initZegoCloud(user.id, user.email ?? "User");
-      }
+    final user = _supabase?.auth.currentUser;
+    if (user != null) {
+      await _zego.initZegoCloud(
+        userId: user.id,
+        userName: user.email ?? "User",
+      );
+    } else {
+      print("⚠️ No user logged in, cannot init Zego Cloud");
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // START VOICE CALL
+  // ---------------------------------------------------------------------------
+  void _startVoiceCall() async {
+    final user = _supabase?.auth.currentUser;
+    if (user != null) {
+      // Log the call start
+      await Get.find<CallProvider>().addCallLog(
+        chatId: widget.chatId,
+        userId: user.id,
+        duration: 0, // Will be updated on end
+        callType: 'voice',
+        missed: false,
+      );
+
+      Get.to(
+        () => _zego.getCallWidget(
+          chatId: widget.chatId,
+          userId: user.id,
+          userName: user.email ?? "User",
+          isVideoCall: false,
+        ),
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // START VIDEO CALL
+  // ---------------------------------------------------------------------------
+  void _startVideoCall() async {
+    final user = _supabase?.auth.currentUser;
+    if (user != null) {
+      // Log the call start
+      await Get.find<CallProvider>().addCallLog(
+        chatId: widget.chatId,
+        userId: user.id,
+        duration: 0, // Will be updated on end
+        callType: 'video',
+        missed: false,
+      );
+
+      Get.to(
+        () => _zego.getCallWidget(
+          chatId: widget.chatId,
+          userId: user.id,
+          userName: user.email ?? "User",
+          isVideoCall: true,
+        ),
+      );
     }
   }
 
@@ -400,8 +543,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     _msgCtrl.dispose();
     _scroll.dispose();
     _rec.closeRecorder();
-    _supabase.removeChannel(_msgChannel);
-    _supabase.removeChannel(_typingChannel);
+    if (_msgChannel != null) _supabase?.removeChannel(_msgChannel!);
+    if (_typingChannel != null) _supabase?.removeChannel(_typingChannel!);
     super.dispose();
   }
 
@@ -431,23 +574,18 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
     );
   }
 
+  //appbar
   AppBar _buildAppBar() {
     return AppBar(
       title: Text(widget.otherUserName),
       actions: [
         IconButton(
+          icon: const Icon(Icons.call),
+          onPressed: () => _startVoiceCall(),
+        ),
+        IconButton(
           icon: const Icon(Icons.videocam),
-          onPressed: () {
-            Get.toNamed(
-              '/chatRoom',
-              parameters: {
-                'chatId': widget.chatId,
-                'otherUserId': widget.otherUserId,
-                'otherUserName': widget.otherUserName,
-                'isVideoCall': 'true',
-              },
-            );
-          },
+          onPressed: () => _startVideoCall(),
         ),
       ],
     );
@@ -475,7 +613,7 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
   }
 
   Widget _buildMessageBubble(Map<String, dynamic> msg) {
-    final isMe = msg['sender_id'] == _supabase.auth.currentUser?.id;
+    final isMe = msg['sender_id'] == _supabase?.auth.currentUser?.id;
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -537,6 +675,8 @@ class _ChatRoomScreenState extends State<ChatRoomScreen> {
             Expanded(
               child: TextField(
                 controller: _msgCtrl,
+                enabled: true,
+                autofocus: true,
                 onChanged: (val) => _sendTyping(val.isNotEmpty),
                 decoration: InputDecoration(
                   filled: true,

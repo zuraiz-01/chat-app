@@ -1,10 +1,13 @@
+import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../service/auth_service.dart';
 
 class GroupService {
-  final supabase = Supabase.instance.client;
+  final supabase = Get.find<AuthService>().supabase;
 
   Future<Map<String, dynamic>?> getGroupInfo(String groupId) async {
-    final response = await supabase
+    if (supabase == null) return null;
+    final response = await supabase!
         .from('groups')
         .select()
         .eq('id', groupId)
@@ -13,7 +16,8 @@ class GroupService {
   }
 
   Future<List<Map<String, dynamic>>> getGroupMembers(String groupId) async {
-    final response = await supabase
+    if (supabase == null) return [];
+    final response = await supabase!
         .from('group_members')
         .select('*, profiles(username, avatar_url)')
         .eq('group_id', groupId);
@@ -24,7 +28,8 @@ class GroupService {
     String groupId, {
     int limit = 50,
   }) async {
-    final response = await supabase
+    if (supabase == null) return [];
+    final response = await supabase!
         .from('group_messages')
         .select()
         .eq('group_id', groupId)
@@ -34,15 +39,18 @@ class GroupService {
   }
 
   Future<void> sendMessage(String groupId, Map<String, dynamic> message) async {
-    await supabase.from('group_messages').insert(message);
+    if (supabase == null) return;
+    await supabase!.from('group_messages').insert(message);
   }
 
   Future<void> uploadMedia(String fileName, dynamic file) async {
-    await supabase.storage.from('group_media').upload(fileName, file);
+    if (supabase == null) return;
+    await supabase!.storage.from('group_media').upload(fileName, file);
   }
 
   String getMediaUrl(String fileName) {
-    return supabase.storage.from('group_media').getPublicUrl(fileName);
+    if (supabase == null) return '';
+    return supabase!.storage.from('group_media').getPublicUrl(fileName);
   }
 
   Future<void> updateMutePreference(
@@ -50,7 +58,8 @@ class GroupService {
     String groupId,
     bool isMuted,
   ) async {
-    await supabase.from('user_group_preferences').upsert({
+    if (supabase == null) return;
+    await supabase!.from('user_group_preferences').upsert({
       'user_id': userId,
       'group_id': groupId,
       'is_muted': isMuted,
@@ -58,7 +67,8 @@ class GroupService {
   }
 
   Future<void> leaveGroup(String userId, String groupId) async {
-    await supabase
+    if (supabase == null) return;
+    await supabase!
         .from('group_members')
         .delete()
         .eq('user_id', userId)
@@ -66,14 +76,16 @@ class GroupService {
   }
 
   Future<void> pinMessage(int messageId, bool isPinned) async {
-    await supabase
+    if (supabase == null) return;
+    await supabase!
         .from('group_messages')
         .update({'is_pinned': isPinned})
         .eq('id', messageId);
   }
 
   Future<void> removeMember(String userId, String groupId) async {
-    await supabase
+    if (supabase == null) return;
+    await supabase!
         .from('group_members')
         .delete()
         .eq('user_id', userId)

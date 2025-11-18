@@ -1,39 +1,54 @@
-import 'package:chat_app/screens/home/home.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../screens/home/home.dart';
 
-class AuthService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+class AuthService extends GetxService {
+  // 🔵 Safe Supabase Client Getter
+  SupabaseClient? get _supabase {
+    try {
+      return Supabase.instance.client;
+    } catch (e) {
+      return null;
+    }
+  }
 
-  // 🟢 Login with Email/Password
+  // Public getter for safe access
+  SupabaseClient? get supabase => _supabase;
+
+  // 🟢 Login with Email & Password
   Future<void> signInWithEmailPassword(String email, String password) async {
     try {
       if (email.isEmpty || password.isEmpty) {
-        Get.snackbar('Error', 'Email and password cannot be empty.');
+        Get.snackbar("Error", "Email and password cannot be empty.");
         return;
       }
 
-      final response = await _supabase.auth.signInWithPassword(
+      final supabase = this.supabase;
+      if (supabase == null) {
+        Get.snackbar("Error", "Supabase not initialized");
+        return;
+      }
+
+      final response = await supabase.auth.signInWithPassword(
         email: email,
         password: password,
       );
 
       if (response.user == null) {
-        Get.snackbar('Login Failed', 'Invalid email or password.');
+        Get.snackbar("Login Failed", "Invalid email or password.");
         return;
       }
 
-      Get.snackbar('Success', 'Logged in successfully!');
-
+      Get.snackbar("Success", "Logged in successfully!");
       Get.offAll(() => const HomeTabScreen());
     } on AuthException catch (e) {
-      Get.snackbar('Auth Error', e.message);
+      Get.snackbar("Auth Error", e.message);
     } catch (e) {
-      Get.snackbar('Error', e.toString());
+      Get.snackbar("Error", e.toString());
     }
   }
 
-  // 🟣 Signup with Email/Password
+  // 🟣 Sign Up With Email/Password
   Future<void> signUpWithEmailPassword(
     String email,
     String password,
@@ -41,82 +56,107 @@ class AuthService {
   ) async {
     try {
       if (email.isEmpty || password.isEmpty || name.isEmpty) {
-        Get.snackbar('Error', 'All fields are required.');
+        Get.snackbar("Error", "All fields are required.");
         return;
       }
 
-      final response = await _supabase.auth.signUp(
+      final supabase = this.supabase;
+      if (supabase == null) {
+        Get.snackbar("Error", "Supabase not initialized");
+        return;
+      }
+
+      final response = await supabase.auth.signUp(
         email: email,
         password: password,
       );
 
       if (response.user == null) {
-        Get.snackbar('Sign Up Failed', 'Something went wrong. Try again.');
+        Get.snackbar("Sign Up Failed", "Something went wrong.");
         return;
       }
 
-      // Insert profile into database
-      await _supabase.from('profiles').insert({
-        'id': response.user!.id,
-        'username': name.toLowerCase().replaceAll(' ', '_'),
-        'full_name': name,
+      await supabase.from("profiles").insert({
+        "id": response.user!.id,
+        "username": name.toLowerCase().replaceAll(" ", "_"),
+        "full_name": name,
       });
 
-      Get.snackbar('Success', 'Account created successfully!');
+      Get.snackbar("Success", "Account created successfully!");
     } on AuthException catch (e) {
-      Get.snackbar('Auth Error', e.message);
+      Get.snackbar("Auth Error", e.message);
     } catch (e) {
-      Get.snackbar('Error', e.toString());
+      Get.snackbar("Error", e.toString());
     }
   }
 
   // 🔵 Google Sign-In
   Future<void> signInWithGoogle() async {
     try {
-      await _supabase.auth.signInWithOAuth(
+      final supabase = this.supabase;
+      if (supabase == null) {
+        Get.snackbar("Error", "Supabase not initialized");
+        return;
+      }
+
+      await supabase.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: 'https://vfvvoxumctiaugtqfkbq.supabase.co/auth/v1/callback',
+        redirectTo: "https://vfvvoxumctiaugtqfkbq.supabase.co/auth/v1/callback",
       );
     } catch (e) {
-      Get.snackbar('Google Sign-In Failed', e.toString());
+      Get.snackbar("Google Sign-In Failed", e.toString());
     }
   }
 
   // 🔴 Logout
   Future<void> signOut() async {
     try {
-      await _supabase.auth.signOut();
-      Get.snackbar('Signed Out', 'You have been logged out.');
+      final supabase = this.supabase;
+      if (supabase == null) {
+        Get.snackbar("Error", "Supabase not initialized");
+        return;
+      }
+
+      await supabase.auth.signOut();
+      Get.snackbar("Signed Out", "You have been logged out.");
     } catch (e) {
-      Get.snackbar('Error', e.toString());
+      Get.snackbar("Error", e.toString());
     }
   }
 
-  // 🟡 Current User Email
+  // 🟡 Get Current User Email
   String? getCurrentUserEmail() {
-    final user = _supabase.auth.currentUser;
-    return user?.email;
+    final supabase = this.supabase;
+    return supabase?.auth.currentUser?.email;
   }
 
   // 🟠 Get Current Session
   Session? getCurrentSession() {
-    return _supabase.auth.currentSession;
+    final supabase = this.supabase;
+    return supabase?.auth.currentSession;
   }
 
   // 🔵 Reset Password
   Future<void> resetPassword(String email) async {
     try {
       if (email.isEmpty) {
-        Get.snackbar('Error', 'Email cannot be empty.');
+        Get.snackbar("Error", "Email cannot be empty.");
         return;
       }
 
-      await _supabase.auth.resetPasswordForEmail(email);
-      Get.snackbar('Success', 'Password reset link sent to your email.');
+      final supabase = this.supabase;
+      if (supabase == null) {
+        Get.snackbar("Error", "Supabase not initialized");
+        return;
+      }
+
+      await supabase.auth.resetPasswordForEmail(email);
+
+      Get.snackbar("Success", "Password reset link sent!");
     } on AuthException catch (e) {
-      Get.snackbar('Auth Error', e.message);
+      Get.snackbar("Auth Error", e.message);
     } catch (e) {
-      Get.snackbar('Error', e.toString());
+      Get.snackbar("Error", e.toString());
     }
   }
 }

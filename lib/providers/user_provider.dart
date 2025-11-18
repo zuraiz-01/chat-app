@@ -1,8 +1,9 @@
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../service/auth_service.dart';
 
 class UserProvider extends GetxController {
-  final supabase = Supabase.instance.client;
+  SupabaseClient? get supabase => Get.find<AuthService>().supabase;
 
   final Rx<User?> currentUser = Rx<User?>(null);
   final Rx<Map<String, dynamic>> userProfile = Rx<Map<String, dynamic>>({});
@@ -18,6 +19,9 @@ class UserProvider extends GetxController {
 
   void loadCurrentUser() async {
     try {
+      final supabase = this.supabase;
+      if (supabase == null) return;
+
       final user = supabase.auth.currentUser;
       currentUser.value = user;
 
@@ -49,6 +53,9 @@ class UserProvider extends GetxController {
   }
 
   void setupRealtime() {
+    final supabase = this.supabase;
+    if (supabase == null) return;
+
     final user = supabase.auth.currentUser;
     if (user != null) {
       supabase
@@ -72,6 +79,9 @@ class UserProvider extends GetxController {
 
   Future<void> updateProfile(Map<String, dynamic> updates) async {
     try {
+      final supabase = this.supabase;
+      if (supabase == null) return;
+
       final user = supabase.auth.currentUser;
       if (user != null) {
         await supabase.from('profiles').update(updates).eq('id', user.id);
@@ -85,6 +95,9 @@ class UserProvider extends GetxController {
 
   Future<void> setOnlineStatus(bool status) async {
     try {
+      final supabase = this.supabase;
+      if (supabase == null) return;
+
       final user = supabase.auth.currentUser;
       if (user != null) {
         isOnline.value = status;
@@ -100,6 +113,9 @@ class UserProvider extends GetxController {
 
   Future<void> signOut() async {
     try {
+      final supabase = this.supabase;
+      if (supabase == null) return;
+
       final user = supabase.auth.currentUser;
       if (user != null) {
         await setOnlineStatus(false);

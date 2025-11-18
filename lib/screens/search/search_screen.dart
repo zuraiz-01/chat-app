@@ -15,7 +15,7 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final FriendProvider friendProvider = Get.put(FriendProvider());
+  final FriendProvider friendProvider = Get.find<FriendProvider>();
 
   var searchResults = <Map<String, dynamic>>[].obs;
   var isSearching = false.obs;

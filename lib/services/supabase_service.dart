@@ -1,7 +1,17 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:get/get.dart';
+import '../service/auth_service.dart';
 
 class SupabaseService {
-  final SupabaseClient _client = Supabase.instance.client;
+  SupabaseClient? get _client => Get.find<AuthService>().supabase;
+
+  SupabaseClient _getClient() {
+    final client = _client;
+    if (client == null) throw Exception('Supabase client not initialized');
+    return client;
+  }
+
+  SupabaseClient? get client => _client;
 
   // ===========================
   // MARK: - Chat Rooms
@@ -13,7 +23,9 @@ class SupabaseService {
     required String createdBy,
     required List<String> members,
   }) async {
-    final response = await _client
+    final client = _getClient();
+
+    final response = await client
         .from('chats')
         .insert({
           'name': name,
@@ -29,14 +41,15 @@ class SupabaseService {
     final participantRows = members
         .map((m) => {'chat_id': chatId, 'user_id': m})
         .toList();
-    await _client.from('chat_participants').insert(participantRows);
+    await client.from('chat_participants').insert(participantRows);
 
     return chatId;
   }
 
   /// Get all chat rooms for a user
   Future<List<Map<String, dynamic>>> getUserChatRooms(String userId) async {
-    final response = await _client
+    final client = _getClient();
+    final response = await client
         .from('chat_participants')
         .select('chats(*), chat_id')
         .eq('user_id', userId)
@@ -47,7 +60,8 @@ class SupabaseService {
 
   /// Stream chat rooms in real-time
   Stream<List<Map<String, dynamic>>> getUserChatRoomsStream(String userId) {
-    return _client
+    final client = _getClient();
+    return client
         .from('chats')
         .stream(primaryKey: ['id'])
         .order('updated_at')
@@ -76,7 +90,8 @@ class SupabaseService {
     required String messageType,
     String? mediaUrl,
   }) async {
-    await _client.from('messages').insert({
+    final client = _getClient();
+    await client.from('messages').insert({
       'chat_id': chatId,
       'sender_id': senderId,
       'content': content,
@@ -85,7 +100,7 @@ class SupabaseService {
     });
 
     // Update chat "updated_at"
-    await _client
+    await client
         .from('chats')
         .update({'updated_at': DateTime.now().toIso8601String()})
         .eq('id', chatId);
@@ -97,7 +112,8 @@ class SupabaseService {
     int limit = 50,
     int offset = 0,
   }) async {
-    final response = await _client
+    final client = _getClient();
+    final response = await client
         .from('messages')
         .select('*')
         .eq('chat_id', chatId)
@@ -109,7 +125,8 @@ class SupabaseService {
 
   /// Stream messages in real-time
   Stream<List<Map<String, dynamic>>> getRoomMessagesStream(String chatId) {
-    return _client.from('messages').stream(primaryKey: ['id']).map((rows) {
+    final client = _getClient();
+    return client.from('messages').stream(primaryKey: ['id']).map((rows) {
       // rows is List<dynamic>, we filter manually
       return (rows as List<dynamic>)
           .where((row) => row['chat_id'] == chatId)
@@ -120,15 +137,14 @@ class SupabaseService {
 
   /// Mark message as read
   Future<void> markMessageAsRead(String messageId) async {
-    await _client
-        .from('messages')
-        .update({'is_read': true})
-        .eq('id', messageId);
+    final client = _getClient();
+    await client.from('messages').update({'is_read': true}).eq('id', messageId);
   }
 
   /// Get unread message count
   Future<int> getUnreadMessageCount(String chatId, String userId) async {
-    final response = await _client
+    final client = _getClient();
+    final response = await client
         .from('messages')
         .select('id')
         .eq('chat_id', chatId)
@@ -143,7 +159,8 @@ class SupabaseService {
 
   /// Get all friends for a user
   Future<List<Map<String, dynamic>>> getFriends(String userId) async {
-    final response = await _client
+    final client = _getClient();
+    final response = await client
         .from('friends') // Make sure this table exists in Supabase
         .select('*, friend:profiles(*)') // optional: join with profiles table
         .eq('user_id', userId);
@@ -160,7 +177,8 @@ class SupabaseService {
     String userId,
     bool isTyping,
   ) async {
-    final existing = await _client
+    final client = _getClient();
+    final existing = await client
         .from('typing_status')
         .select('id')
         .eq('chat_id', chatId)
@@ -168,13 +186,13 @@ class SupabaseService {
         .maybeSingle();
 
     if (existing == null) {
-      await _client.from('typing_status').insert({
+      await client.from('typing_status').insert({
         'chat_id': chatId,
         'user_id': userId,
         'is_typing': isTyping,
       });
     } else {
-      await _client
+      await client
           .from('typing_status')
           .update({'is_typing': isTyping})
           .eq('id', existing['id']);
@@ -183,7 +201,8 @@ class SupabaseService {
 
   /// Stream typing users in a chat
   Stream<List<Map<String, dynamic>>> getTypingStatusStream(String chatId) {
-    return _client.from('typing_status').stream(primaryKey: ['id']).map((rows) {
+    final client = _getClient();
+    return client.from('typing_status').stream(primaryKey: ['id']).map((rows) {
       // rows is List<dynamic>, we filter manually
       return (rows as List<dynamic>)
           .where((row) => row['chat_id'] == chatId && row['is_typing'] == true)
@@ -205,51 +224,82 @@ class SupabaseService {
   }
 
   // ===========================
-  // MARK: - Call Logs
+  // MARK: - Call Logs (NEW APPROACH)
   // ===========================
 
   Future<void> addCallLog({
-    required String initiatorId,
-    required String recipientId,
+    required String chatId,
+    required String userId, // caller
     required int duration,
     required String callType, // 'voice' or 'video'
     required bool missed,
   }) async {
-    await _client.from('call_logs').insert({
-      'initiator_id': initiatorId,
-      'recipient_id': recipientId,
+    final client = _getClient();
+    await client.from('call_logs').insert({
+      'chat_id': chatId,
+      'user_id': userId,
       'duration': duration,
       'call_type': callType,
       'missed': missed,
     });
   }
 
-  Future<List<Map<String, dynamic>>> getCallLogs(String userId) async {
-    final response = await _client
+  /// Get call logs by chatroom
+  Future<List<Map<String, dynamic>>> getCallLogs(String chatId) async {
+    final client = _getClient();
+    final response = await client
         .from('call_logs')
         .select('*')
-        .or('initiator_id.eq.$userId,recipient_id.eq.$userId')
+        .eq('chat_id', chatId)
         .order('created_at', ascending: false);
 
     return List<Map<String, dynamic>>.from(response);
   }
 
-  Stream<List<Map<String, dynamic>>> getCallLogsStream(String userId) {
-    return _client
+  /// Stream call logs for a chatroom
+  Stream<List<Map<String, dynamic>>> getCallLogsStream(String chatId) {
+    final client = _getClient();
+    return client
         .from('call_logs')
         .stream(primaryKey: ['id'])
+        .eq('chat_id', chatId)
         .order('created_at')
         .map((rows) {
-          // filter manually because .or() is not supported in streams
           return (rows as List<dynamic>)
-              .where(
-                (row) =>
-                    row['initiator_id'] == userId ||
-                    row['recipient_id'] == userId,
-              )
               .map((e) => Map<String, dynamic>.from(e))
               .toList();
         });
+  }
+
+  /// Stream all call logs for the authenticated user (filtered by RLS)
+  Stream<List<Map<String, dynamic>>> getAllCallLogsStream() {
+    final client = _getClient();
+    return client
+        .from('call_logs')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false)
+        .map((rows) {
+          return (rows as List<dynamic>)
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        });
+  }
+
+  /// Get the other participant in a chat (excluding current user)
+  Future<Map<String, dynamic>?> getOtherParticipant(
+    String chatId,
+    String currentUserId,
+  ) async {
+    final client = _getClient();
+    final response = await client
+        .from('chat_participants')
+        .select('user_id, profiles(username, full_name)')
+        .eq('chat_id', chatId)
+        .neq('user_id', currentUserId)
+        .limit(1)
+        .single();
+
+    return response['profiles'] as Map<String, dynamic>?;
   }
 
   /// Sign in user with email and password
@@ -258,7 +308,8 @@ class SupabaseService {
     required String password,
   }) async {
     try {
-      final response = await _client.auth.signInWithPassword(
+      final client = _getClient();
+      final response = await client.auth.signInWithPassword(
         email: email,
         password: password,
       );
@@ -277,8 +328,9 @@ class SupabaseService {
   /// Add a user to an existing chat room
   Future<void> addRoomMember(String roomId, String userId) async {
     try {
+      final client = _getClient();
       // Check if user is already a participant
-      final existing = await _client
+      final existing = await client
           .from('chat_participants')
           .select('id')
           .eq('chat_id', roomId)
@@ -287,13 +339,13 @@ class SupabaseService {
 
       if (existing == null) {
         // Add new participant
-        await _client.from('chat_participants').insert({
+        await client.from('chat_participants').insert({
           'chat_id': roomId,
           'user_id': userId,
         });
 
         // Optionally update the chat's updated_at
-        await _client
+        await client
             .from('chats')
             .update({'updated_at': DateTime.now().toIso8601String()})
             .eq('id', roomId);
@@ -309,7 +361,8 @@ class SupabaseService {
 
   Future<List<Map<String, dynamic>>> searchUsers(String query) async {
     if (query.isEmpty) return [];
-    final response = await _client
+    final client = _getClient();
+    final response = await client
         .from('profiles')
         .select('id, username, avatar_url')
         .ilike('username', '%$query%')

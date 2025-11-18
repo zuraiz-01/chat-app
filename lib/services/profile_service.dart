@@ -1,13 +1,15 @@
 import 'dart:io';
+import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../service/auth_service.dart';
 
 class ProfileService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient? _supabase = Get.find<AuthService>().supabase;
 
   // Fetch user profile
   Future<Map<String, dynamic>?> getUserProfile(String userId) async {
     try {
-      final response = await _supabase
+      final response = await _supabase!
           .from('profiles')
           .select()
           .eq('id', userId)
@@ -24,7 +26,7 @@ class ProfileService {
     Map<String, dynamic> updates,
   ) async {
     try {
-      await _supabase.from('profiles').update(updates).eq('id', userId);
+      await _supabase!.from('profiles').update(updates).eq('id', userId);
     } catch (e) {
       throw Exception('Failed to update profile: $e');
     }
@@ -34,12 +36,12 @@ class ProfileService {
   Future<String?> uploadAvatar(String userId, File file) async {
     try {
       final fileName = '$userId-avatar.png';
-      final response = await _supabase.storage
+      final response = await _supabase?.storage
           .from('avatars')
           .upload(fileName, file);
 
-      if (response.isNotEmpty) {
-        final publicUrl = _supabase.storage
+      if (response!.isNotEmpty) {
+        final publicUrl = _supabase?.storage
             .from('avatars')
             .getPublicUrl(fileName);
         return publicUrl;

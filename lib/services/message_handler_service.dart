@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:chat_app/services/supabase_service.dart';
+import 'package:chat_app/service/auth_service.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -12,8 +13,11 @@ class MessageHandlerService {
 
   MessageHandlerService._internal();
 
+  // final _supabase = Supabase.instance.client;
+  // final _supabaseService = SupabaseService();
+  // SupabaseClient get _supabase => Supabase.instance.client;
   final _supabaseService = SupabaseService();
-  final _supabase = Supabase.instance.client;
+  final _supabase = Get.find<AuthService>().supabase;
 
   // ===========================
   // MARK: - Message Sending
@@ -115,12 +119,14 @@ class MessageHandlerService {
 
   Future<String?> uploadFile(String filePath, String folder) async {
     try {
+      if (_supabase == null) return null;
+
       final file = File(filePath);
       final fileName =
           '$folder/${DateTime.now().millisecondsSinceEpoch}_${file.path.split('/').last}';
 
-      await _supabase.storage.from('messages').upload(fileName, file);
-      return _supabase.storage.from('messages').getPublicUrl(fileName);
+      await _supabase!.storage.from('messages').upload(fileName, file);
+      return _supabase!.storage.from('messages').getPublicUrl(fileName);
     } catch (e) {
       print('Error uploading file: $e');
       return null;
@@ -216,20 +222,20 @@ class MessageHandlerService {
   }
 
   // ===========================
-  // MARK: - Call Logging
+  // MARK: - Call Logging (NEW)
   // ===========================
 
   Future<void> logCall({
-    required String initiatorId,
-    required String recipientId,
+    required String chatId,
+    required String userId, // caller
     required int durationInSeconds,
     required String callType, // 'voice' or 'video'
     required bool missed,
   }) async {
     try {
       await _supabaseService.addCallLog(
-        initiatorId: initiatorId,
-        recipientId: recipientId,
+        chatId: chatId,
+        userId: userId,
         duration: durationInSeconds,
         callType: callType,
         missed: missed,
@@ -239,16 +245,16 @@ class MessageHandlerService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getCallLogs(String userId) async {
+  Future<List<Map<String, dynamic>>> getCallLogs(String chatId) async {
     try {
-      return await _supabaseService.getCallLogs(userId);
+      return await _supabaseService.getCallLogs(chatId);
     } catch (e) {
       print('Error getting call logs: $e');
       return [];
     }
   }
 
-  Stream<List<Map<String, dynamic>>> streamCallLogs(String userId) {
-    return _supabaseService.getCallLogsStream(userId);
+  Stream<List<Map<String, dynamic>>> streamCallLogs(String chatId) {
+    return _supabaseService.getCallLogsStream(chatId);
   }
 }

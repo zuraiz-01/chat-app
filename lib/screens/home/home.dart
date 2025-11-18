@@ -1,8 +1,8 @@
 import 'package:chat_app/routes/app_routes.dart';
 import 'package:chat_app/screens/calls/call_logs_screen.dart';
 import 'package:chat_app/screens/chat/chat_list_screen.dart';
-import 'package:chat_app/screens/friends/friends_screen.dart';
-import 'package:chat_app/screens/groups/groups_screen.dart';
+// import 'package:chat_app/screens/friends/friends_screen.dart'; // Removed friends functionality
+// import 'package:chat_app/screens/groups/groups_screen.dart'; // Removed groups functionality
 import 'package:chat_app/screens/settings/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -19,12 +19,12 @@ class HomeTabScreen extends StatefulWidget {
 class _HomeTabScreenState extends State<HomeTabScreen> {
   int _selectedIndex = 0;
 
-  final List<Widget> _pages = [
-    const ChatListScreen(), // Chats
-    const GroupsScreen(), // Groups
-    const CallLogsScreen(), // Calls
-    const FriendsScreen(), // Friends
-    const SettingsScreen(), // Settings
+  final List<Widget> _pages = const [
+    ChatListScreen(),
+    // GroupsScreen(), // Removed groups functionality
+    CallLogsScreen(),
+    // FriendsScreen(), // Removed friends functionality
+    SettingsScreen(),
   ];
 
   void _onItemTapped(int index) {
@@ -37,6 +37,7 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: _pages),
+
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
@@ -51,27 +52,26 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
             icon: Icon(Iconsax.message_bold),
             label: 'Chats',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Iconsax.people_bold),
-            label: 'Groups',
-          ),
+          // BottomNavigationBarItem(
+          //   icon: Icon(Iconsax.people_bold),
+          //   label: 'Groups',
+          // ), // Removed groups functionality
           BottomNavigationBarItem(
             icon: Icon(Iconsax.call_bold),
             label: 'Calls',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Iconsax.user_bold),
-            label: 'Friends',
-          ),
+          // BottomNavigationBarItem(
+          //   icon: Icon(Iconsax.user_bold),
+          //   label: 'Friends',
+          // ), // Removed friends functionality
           BottomNavigationBarItem(
             icon: Icon(Iconsax.setting_bold),
             label: 'Settings',
           ),
         ],
       ),
-      floatingActionButton:
-          _selectedIndex ==
-              0 // Only show on Chats tab
+
+      floatingActionButton: _selectedIndex == 0
           ? FloatingActionButton(
               heroTag: 'homeFab',
               onPressed: () => Get.toNamed(AppRoutes.search),

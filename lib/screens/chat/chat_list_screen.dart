@@ -17,20 +17,19 @@ class ChatListScreen extends StatefulWidget {
 
 class _ChatListScreenState extends State<ChatListScreen> {
   final _searchController = TextEditingController();
-  final ChatProvider chatProvider = Get.put(ChatProvider());
-  final UserProvider userProvider = Get.put(UserProvider());
+  final ChatProvider chatProvider = Get.find<ChatProvider>();
+  final UserProvider userProvider = Get.find<UserProvider>();
   final SupabaseService _supabaseService = SupabaseService();
 
   final RxList<Map<String, dynamic>> users = <Map<String, dynamic>>[].obs;
   final RxBool isLoading = true.obs;
 
-  late final User currentUser;
+  User? currentUser;
 
   @override
   void initState() {
     super.initState();
-    currentUser = Supabase.instance.client.auth.currentUser!;
-    loadUsers();
+    _initializeUser();
   }
 
   @override
@@ -39,15 +38,38 @@ class _ChatListScreenState extends State<ChatListScreen> {
     super.dispose();
   }
 
-  // ✅ Fetch users excluding current user
+  /// Initialize current user and load data
+  Future<void> _initializeUser() async {
+    try {
+      // Get current user from Supabase
+      currentUser = Supabase.instance.client.auth.currentUser;
+
+      if (currentUser == null) {
+        // If no user is logged in, redirect to auth
+        Get.offAllNamed('/auth');
+        return;
+      }
+
+      // Load users list
+      await loadUsers();
+    } catch (e) {
+      print('Error initializing user: $e');
+      Get.snackbar('Error', 'Failed to load user data');
+      Get.offAllNamed('/auth');
+    }
+  }
+
+  /// Fetch users excluding the current user
   Future<void> loadUsers() async {
+    if (currentUser == null) return;
+
     try {
       isLoading.value = true;
 
       final response = await Supabase.instance.client
           .from('profiles')
           .select('id, username, avatar_url, full_name')
-          .neq('id', currentUser.id)
+          .neq('id', currentUser!.id)
           .order('username', ascending: true);
 
       users.assignAll(List<Map<String, dynamic>>.from(response));
@@ -59,11 +81,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
-  // ✅ Create or get private chat room
+  /// Get or create private chat room
   Future<String> getOrCreateChatRoom(String otherUserId) async {
+    if (currentUser == null) throw Exception("User not logged in");
+
     try {
       // Check if chat already exists
-      final userChatIds = await _getUserChatIds(currentUser.id);
+      final userChatIds = await _getUserChatIds(currentUser!.id);
 
       for (final chatId in userChatIds) {
         final participants = await Supabase.instance.client
@@ -71,11 +95,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
             .select('user_id')
             .eq('chat_id', chatId);
 
-        final participantIds = participants
+        final participantIds = (participants as List)
             .map((p) => p['user_id'] as String)
             .toList();
 
-        if (participantIds.contains(currentUser.id) &&
+        if (participantIds.contains(currentUser!.id) &&
             participantIds.contains(otherUserId) &&
             participantIds.length == 2) {
           return chatId;
@@ -88,17 +112,17 @@ class _ChatListScreenState extends State<ChatListScreen> {
           .insert({
             'name': 'Private Chat',
             'is_group': false,
-            'created_by': currentUser.id,
+            'created_by': currentUser!.id,
           })
           .select('id')
           .single();
 
-      final chatId = chatResponse['id'];
+      final chatId = chatResponse['id'] as String;
 
-      // Add participants safely (RLS friendly)
+      // Add participants
       await Supabase.instance.client.from('chat_participants').insert({
         'chat_id': chatId,
-        'user_id': currentUser.id,
+        'user_id': currentUser!.id,
       });
 
       await Supabase.instance.client.from('chat_participants').insert({
@@ -113,6 +137,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
+  /// Get all chat IDs for a user
   Future<List<String>> _getUserChatIds(String userId) async {
     final response = await Supabase.instance.client
         .from('chat_participants')
@@ -122,7 +147,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     return (response as List).map((e) => e['chat_id'] as String).toList();
   }
 
-  // ✅ Search filter
+  /// Filter users by search
   List<Map<String, dynamic>> getFilteredUsers() {
     final query = _searchController.text.trim().toLowerCase();
     if (query.isEmpty) return users;
@@ -134,7 +159,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }).toList();
   }
 
-  // ✅ Sign out
+  /// Sign out
   Future<void> _signOut() async {
     try {
       await Supabase.instance.client.auth.signOut();

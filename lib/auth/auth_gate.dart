@@ -1,9 +1,9 @@
+import 'package:chat_app/screens/home/home.dart';
 import 'package:chat_app/screens/auth/login_screen.dart';
 import 'package:chat_app/screens/splash/splash_screen.dart';
-import 'package:chat_app/screens/home/home.dart';
-import 'package:chat_app/service/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:chat_app/service/auth_service.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -14,57 +14,46 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   final AuthService _authService = AuthService();
-  final Color primaryColor = const Color(0xFF10451D);
-  bool _showSplash = true;
+  bool _isSupabaseInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    // Show splash for 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _showSplash = false;
-        });
-      }
+    _checkSupabaseInitialization();
+  }
+
+  // This function ensures Supabase is initialized.
+  Future<void> _checkSupabaseInitialization() async {
+    // We check if Supabase is initialized correctly here
+    if (Supabase.instance.client == null) {
+      // If not, wait until it's done initializing.
+      await Supabase.initialize(
+        url: 'https://vfvvoxumctiaugtqfkbq.supabase.co',
+        anonKey:
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmdnZveHVtY3RpYXVndHFma2JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI3NzgxODAsImV4cCI6MjA3ODM1NDE4MH0.1WnKWMkfJRAKqKZsgGreOd3pMs0YOe6Xq8zpKH50sv8',
+      );
+    }
+    setState(() {
+      _isSupabaseInitialized = true;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_showSplash) {
+    // If Supabase is still initializing, show the SplashScreen
+    if (!_isSupabaseInitialized) {
       return const SplashScreen();
     }
 
+    // Now we can safely access the current session.
     final session = _authService.getCurrentSession();
 
-    // 🔹 If already logged in, go to Home
     if (session != null) {
+      // If user has an active session, navigate to Home
       return const HomeTabScreen();
     }
 
-    // 🔹 Otherwise, listen for auth state changes
-    return StreamBuilder<AuthState>(
-      stream: Supabase.instance.client.auth.onAuthStateChange,
-      builder: (context, snapshot) {
-        // Show loading while waiting
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Scaffold(
-            backgroundColor: Colors.white,
-            body: Center(child: CircularProgressIndicator(color: primaryColor)),
-          );
-        }
-
-        final session = snapshot.data?.session;
-
-        // If session is active → go Home
-        if (session != null) {
-          return const HomeTabScreen();
-        }
-
-        // Else → go to Login screen
-        return const LoginScreen();
-      },
-    );
+    // If no session exists, show the login screen
+    return const LoginScreen();
   }
 }

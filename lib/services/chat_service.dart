@@ -1,23 +1,28 @@
 import 'package:chat_app/services/supabase_service.dart';
+import 'package:chat_app/service/auth_service.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ChatService {
+  // Singleton pattern
   static final ChatService _instance = ChatService._internal();
   factory ChatService() => _instance;
   ChatService._internal();
 
   final _supabaseService = SupabaseService();
-  final SupabaseClient _supabase = Supabase.instance.client;
+
+  // Lazy getter for Supabase client
+  SupabaseClient? get _supabase => Get.find<AuthService>().supabase;
+
+  // ===========================
   // Fetch all chats for a user
   // ===========================
   Future<List<Map<String, dynamic>>> fetchChats(String userId) async {
     try {
-      // Calls SupabaseService to get user's chat rooms
       return await _supabaseService.getUserChatRooms(userId);
     } catch (e) {
       Get.snackbar('Error', 'Failed to fetch chats: $e');
-      rethrow;
+      return [];
     }
   }
 
@@ -30,7 +35,6 @@ class ChatService {
     int offset = 0,
   }) async {
     try {
-      // Calls SupabaseService to get messages for the room
       return await _supabaseService.getRoomMessages(
         roomId,
         limit: limit,
@@ -38,7 +42,7 @@ class ChatService {
       );
     } catch (e) {
       Get.snackbar('Error', 'Failed to load messages: $e');
-      rethrow;
+      return [];
     }
   }
 
@@ -50,24 +54,25 @@ class ChatService {
       return _supabaseService.getRoomMessagesStream(roomId);
     } catch (e) {
       Get.snackbar('Error', 'Failed to stream messages: $e');
-      // Return empty stream on error
       return const Stream.empty();
     }
   }
-  // ===========================
-  // MARK: - Sending Messages
-  // ===========================
 
+  // ===========================
+  // Sending Messages
+  // ===========================
   Future<void> sendMessage({
     required String chatId,
     required String senderId,
     required String content,
     String messageType = 'text',
     String? mediaUrl,
-    required String message,
-    required String roomId,
   }) async {
     try {
+      if (_supabase?.auth.currentUser == null) {
+        Get.snackbar('Error', 'User not logged in');
+        return;
+      }
       await _supabaseService.sendMessage(
         chatId: chatId,
         senderId: senderId,
@@ -77,20 +82,18 @@ class ChatService {
       );
     } catch (e) {
       Get.snackbar('Error', 'Failed to send message: $e');
-      rethrow;
     }
   }
 
   // ===========================
-  // MARK: - Chat List
+  // Chat List
   // ===========================
-
   Future<List<Map<String, dynamic>>> fetchUserChats(String userId) async {
     try {
       return await _supabaseService.getUserChatRooms(userId);
     } catch (e) {
       Get.snackbar('Error', 'Failed to fetch chats: $e');
-      rethrow;
+      return [];
     }
   }
 
@@ -99,9 +102,8 @@ class ChatService {
   }
 
   // ===========================
-  // MARK: - Chat Messages
+  // Chat Messages
   // ===========================
-
   Future<List<Map<String, dynamic>>> getChatMessages(
     String chatId, {
     int limit = 50,
@@ -115,7 +117,7 @@ class ChatService {
       );
     } catch (e) {
       Get.snackbar('Error', 'Failed to load messages: $e');
-      rethrow;
+      return [];
     }
   }
 
@@ -124,9 +126,8 @@ class ChatService {
   }
 
   // ===========================
-  // MARK: - Message Read / Unread
+  // Message Read / Unread
   // ===========================
-
   Future<void> markMessageAsRead(String messageId) async {
     try {
       await _supabaseService.markMessageAsRead(messageId);
@@ -145,10 +146,9 @@ class ChatService {
   }
 
   // ===========================
-  // MARK: - Group Chat Management
+  // Group Chat Management
   // ===========================
-
-  Future<String> createGroupChat({
+  Future<String?> createGroupChat({
     required String name,
     required String createdBy,
     required List<String> members,
@@ -163,7 +163,7 @@ class ChatService {
       return chatId;
     } catch (e) {
       Get.snackbar('Error', 'Failed to create group: $e');
-      rethrow;
+      return null;
     }
   }
 
@@ -172,7 +172,7 @@ class ChatService {
       return await _supabaseService.getUserChatRooms(userId);
     } catch (e) {
       Get.snackbar('Error', 'Failed to load groups: $e');
-      rethrow;
+      return [];
     }
   }
 
@@ -183,6 +183,7 @@ class ChatService {
     String messageType = 'text',
   }) async {
     try {
+      if (_supabase?.auth.currentUser == null) return;
       await _supabaseService.sendMessage(
         chatId: chatId,
         senderId: senderId,
@@ -191,7 +192,6 @@ class ChatService {
       );
     } catch (e) {
       Get.snackbar('Error', 'Failed to send group message: $e');
-      rethrow;
     }
   }
 
@@ -200,29 +200,31 @@ class ChatService {
   }
 
   // ===========================
-  // MARK: - Search
+  // Search
   // ===========================
-
   Future<List<Map<String, dynamic>>> searchUsers(String query) async {
     try {
       return await _supabaseService.searchUsers(query);
     } catch (e) {
       Get.snackbar('Error', 'Search failed: $e');
-      rethrow;
+      return [];
     }
   }
 
   // ===========================
-  // MARK: - Realtime Listeners
+  // Realtime Listeners
   // ===========================
-
   RealtimeChannel? _messageChannel;
   RealtimeChannel? _statusChannel;
 
-  /// Listen for new messages
   void setupMessageRealtime(String userId, Function onUpdate) {
+    final user = _supabase?.auth.currentUser;
+    if (user == null) {
+      print("❌ User not logged in. Cannot setup realtime messages.");
+      return;
+    }
     _messageChannel = _supabase
-        .channel('messages_$userId')
+        ?.channel('messages_$userId')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
@@ -232,10 +234,9 @@ class ChatService {
         .subscribe();
   }
 
-  /// Listen for user online/offline status updates
   void setupOnlineStatusRealtime(Function onUpdate) {
     _statusChannel = _supabase
-        .channel('online_status')
+        ?.channel('online_status')
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
@@ -245,7 +246,6 @@ class ChatService {
         .subscribe();
   }
 
-  /// Cleanup realtime channels (important on logout or screen close)
   Future<void> disposeRealtime() async {
     await _messageChannel?.unsubscribe();
     await _statusChannel?.unsubscribe();

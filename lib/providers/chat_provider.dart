@@ -1,5 +1,6 @@
 import 'package:chat_app/services/chat_service.dart';
 import 'package:chat_app/services/supabase_service.dart';
+import 'package:chat_app/service/auth_service.dart';
 import 'package:get/get.dart';
 
 class ChatProvider extends GetxController {

@@ -1,6 +1,7 @@
 import 'package:chat_app/screens/auth/forgot_password_screen.dart';
 import 'package:chat_app/screens/auth/signup_screen.dart';
 import 'package:chat_app/screens/home/home.dart';
+import 'package:chat_app/service/auth_service.dart';
 import 'package:chat_app/services/supabase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -17,6 +18,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _supabaseService = SupabaseService();
   late bool _obscurePassword;
+  // Assuming you have AuthService properly set up
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -139,6 +142,40 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
+                // // Login Button
+                // ElevatedButton(
+                //   style: ElevatedButton.styleFrom(
+                //     backgroundColor: primaryColor,
+                //     shape: RoundedRectangleBorder(
+                //       borderRadius: BorderRadius.circular(30),
+                //     ),
+                //     minimumSize: const Size(double.infinity, 55),
+                //   ),
+                //   onPressed: () async {
+                //     final email = _emailController.text.trim();
+                //     final password = _passwordController.text.trim();
+
+                //     if (email.isEmpty || password.isEmpty) {
+                //       Get.snackbar('Error', 'Email and password required');
+                //       return;
+                //     }
+
+                //     try {
+                //       await _supabaseService.signIn(
+                //         email: email,
+                //         password: password,
+                //       );
+                //       Get.offAll(() => const HomeTabScreen());
+                //     } catch (e) {
+                //       Get.snackbar('Login Error', e.toString());
+                //     }
+                //   },
+                //   child: const Text(
+                //     'Login',
+                //     style: TextStyle(fontSize: 18, color: Colors.white),
+                //   ),
+                // ),
+
                 // Login Button
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
@@ -158,10 +195,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     }
 
                     try {
-                      await _supabaseService.signIn(
-                        email: email,
-                        password: password,
-                      );
+                      await _authService.signInWithEmailPassword(
+                        email,
+                        password,
+                      ); // Using AuthService
                       Get.offAll(() => const HomeTabScreen());
                     } catch (e) {
                       Get.snackbar('Login Error', e.toString());
