@@ -229,34 +229,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
 
                 const SizedBox(height: 20),
-
-                // Google Sign-In Button
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: BorderSide(color: primaryColor, width: 1.5),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    minimumSize: const Size(double.infinity, 55),
-                  ),
-                  onPressed: () {
-                    Get.snackbar(
-                      'Coming Soon',
-                      'Google sign-in will be available soon',
-                    );
-                  },
-                  icon: const Icon(Icons.g_mobiledata, color: Colors.red),
-                  label: Text(
-                    "Sign in with Google",
-                    style: TextStyle(
-                      color: primaryColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-
                 const SizedBox(height: 30),
 
                 // Signup link

@@ -1,6 +1,4 @@
 import 'package:chat_app/services/call_service.dart';
-// ignore: unused_import
-import 'package:chat_app/service/auth_service.dart';
 import 'package:get/get.dart';
 import '../core/error_handler.dart';
 
@@ -12,14 +10,14 @@ class CallProvider extends GetxController {
   final RxBool isCallActive = false.obs;
   final RxString callDuration = '0:00'.obs;
 
-  // Load call logs by chatId
+  /// Load call logs (non-stream version)
   Future<void> loadCallLogs(String chatId) async {
     final errorHandler = ErrorHandler();
 
     try {
       isLoading.value = true;
       final logs = await _callService.getCallLogs(chatId);
-      callLogs.value = logs;
+      callLogs.assignAll(logs);
     } catch (e) {
       errorHandler.handleError(e, customMessage: 'Failed to load call logs');
     } finally {
@@ -27,20 +25,20 @@ class CallProvider extends GetxController {
     }
   }
 
-  // Stream logs by chatId
+  /// Real-time stream: logs for a specific chat
   Stream<List<Map<String, dynamic>>> streamCallLogs(String chatId) {
     return _callService.getCallLogsStream(chatId);
   }
 
-  // Stream all call logs for the user
+  /// Real-time stream: all call logs for current user
   Stream<List<Map<String, dynamic>>> streamAllCallLogs() {
     return _callService.getAllCallLogsStream();
   }
 
-  // Add call log
+  /// Add a call log entry
   Future<void> addCallLog({
     required String chatId,
-    required String userId, // caller id
+    required String userId,
     required int duration,
     required String callType,
     required bool missed,
@@ -56,26 +54,30 @@ class CallProvider extends GetxController {
         missed: missed,
       );
 
+      // Refresh logs (optional — stream already updates UI)
       await loadCallLogs(chatId);
     } catch (e) {
       errorHandler.handleError(e, customMessage: 'Failed to add call log');
     }
   }
 
+  /// Format call duration
   String formatDuration(int seconds) {
     return _callService.getFormattedDuration(seconds);
   }
 
-  // Start call (chatId now required)
+  /// When call starts
   void startCall(String chatId) {
     isCallActive.value = true;
   }
 
+  /// When call ends
   void endCall() {
     isCallActive.value = false;
     callDuration.value = '0:00';
   }
 
+  /// Update on-screen timer
   void updateCallDuration(int seconds) {
     callDuration.value = formatDuration(seconds);
   }
