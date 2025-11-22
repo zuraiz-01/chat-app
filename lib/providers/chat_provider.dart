@@ -1,5 +1,7 @@
+import 'package:chat_app/core/error_handler.dart';
 import 'package:chat_app/services/chat_service.dart';
 import 'package:chat_app/services/supabase_service.dart';
+// ignore: unused_import
 import 'package:chat_app/service/auth_service.dart';
 import 'package:get/get.dart';
 
@@ -17,13 +19,14 @@ class ChatProvider extends GetxController {
   // Load chats once
   // ===========================
   Future<void> loadChats(String userId) async {
+    final errorHandler = ErrorHandler();
+
     try {
       isLoading.value = true;
       final chats = await _chatService.fetchChats(userId);
       chatList.value = chats;
     } catch (e) {
-      print('Error loading chats: $e');
-      Get.snackbar('Error', 'Failed to load chats');
+      errorHandler.handleError(e, customMessage: 'Failed to load chats');
     } finally {
       isLoading.value = false;
     }
@@ -40,13 +43,14 @@ class ChatProvider extends GetxController {
   // Load messages of a room
   // ===========================
   Future<void> loadConversation(String roomId) async {
+    final errorHandler = ErrorHandler();
+
     try {
       isLoading.value = true;
       final msgs = await _chatService.getRoomMessages(roomId);
       messages.value = msgs;
     } catch (e) {
-      print('Error loading conversation: $e');
-      Get.snackbar('Error', 'Failed to load messages');
+      errorHandler.handleError(e, customMessage: 'Failed to load messages');
     } finally {
       isLoading.value = false;
     }
@@ -65,6 +69,8 @@ class ChatProvider extends GetxController {
     required String message,
     String messageType = 'text',
   }) async {
+    final errorHandler = ErrorHandler();
+
     try {
       // Call SupabaseService to send the message
       await _supabaseService.sendMessage(
@@ -83,8 +89,7 @@ class ChatProvider extends GetxController {
         'created_at': DateTime.now().toIso8601String(),
       });
     } catch (e) {
-      print('Error sending message: $e');
-      Get.snackbar('Error', 'Failed to send message');
+      errorHandler.handleError(e, customMessage: 'Failed to send message');
     }
   }
 
@@ -96,13 +101,14 @@ class ChatProvider extends GetxController {
       searchResults.clear();
       return;
     }
+    final errorHandler = ErrorHandler();
+
     try {
       searchQuery.value = query;
       final results = await _chatService.searchUsers(query);
       searchResults.value = results;
     } catch (e) {
-      print('Error searching users: $e');
-      Get.snackbar('Error', 'Failed to search users');
+      errorHandler.handleError(e, customMessage: 'Failed to search users');
     }
   }
 

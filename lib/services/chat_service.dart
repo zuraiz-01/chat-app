@@ -2,6 +2,7 @@ import 'package:chat_app/services/supabase_service.dart';
 import 'package:chat_app/service/auth_service.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/error_handler.dart';
 
 class ChatService {
   // Singleton pattern

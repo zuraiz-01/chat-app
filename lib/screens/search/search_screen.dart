@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chat_app/providers/friend_provider.dart';
+import 'package:chat_app/service/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:icons_plus/icons_plus.dart';
@@ -20,7 +21,8 @@ class _SearchScreenState extends State<SearchScreen> {
   var searchResults = <Map<String, dynamic>>[].obs;
   var isSearching = false.obs;
 
-  final supabase = Supabase.instance.client;
+  final AuthService _authService = Get.find<AuthService>();
+  SupabaseClient? get _supabase => _authService.supabase;
 
   void searchUsers(String query) async {
     if (query.isEmpty) {
@@ -30,9 +32,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
     isSearching.value = true;
     try {
-      final currentUser = supabase.auth.currentUser;
+      final currentUser = _supabase?.auth.currentUser;
       if (currentUser != null) {
-        final results = await supabase
+        final results = await _supabase!
             .from('profiles')
             .select('id, username, avatar_url, full_name')
             .neq('id', currentUser.id)
@@ -101,7 +103,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 onTap: () {
                   // Generate invite link
                   final inviteLink =
-                      'https://chatapp.com/invite/${supabase.auth.currentUser?.id}';
+                      'https://chatapp.com/invite/${_supabase?.auth.currentUser?.id}';
                   // Copy to clipboard
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Invite link copied: $inviteLink')),

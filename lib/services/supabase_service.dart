@@ -1,13 +1,39 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:get/get.dart';
 import '../service/auth_service.dart';
+import '../core/constants.dart';
+import '../core/error_handler.dart';
+import '../core/config.dart';
 
 class SupabaseService {
-  SupabaseClient? get _client => Get.find<AuthService>().supabase;
+  final AuthService _authService = Get.find<AuthService>();
+  final ErrorHandler _errorHandler = ErrorHandler();
 
+  SupabaseClient? get _client => _authService.supabase;
+
+  /// Get authenticated Supabase client with security checks
+  SupabaseClient _getAuthenticatedClient() {
+    final client = _client;
+    if (client == null) {
+      throw AuthException('Supabase client not initialized');
+    }
+
+    // Check if user is authenticated
+    final session = _authService.getCurrentSession();
+    if (session == null) {
+      throw AuthException('User not authenticated');
+    }
+
+    return client;
+  }
+
+  /// Get Supabase client without authentication check
   SupabaseClient _getClient() {
     final client = _client;
-    if (client == null) throw Exception('Supabase client not initialized');
+    if (client == null) {
+      throw AuthException('Supabase client not initialized');
+    }
+
     return client;
   }
 
@@ -23,7 +49,7 @@ class SupabaseService {
     required String createdBy,
     required List<String> members,
   }) async {
-    final client = _getClient();
+    final client = _getAuthenticatedClient();
 
     final response = await client
         .from('chats')
@@ -48,7 +74,7 @@ class SupabaseService {
 
   /// Get all chat rooms for a user
   Future<List<Map<String, dynamic>>> getUserChatRooms(String userId) async {
-    final client = _getClient();
+    final client = _getAuthenticatedClient();
     final response = await client
         .from('chat_participants')
         .select('chats(*), chat_id')
@@ -60,7 +86,7 @@ class SupabaseService {
 
   /// Stream chat rooms in real-time
   Stream<List<Map<String, dynamic>>> getUserChatRoomsStream(String userId) {
-    final client = _getClient();
+    final client = _getAuthenticatedClient();
     return client
         .from('chats')
         .stream(primaryKey: ['id'])
@@ -90,7 +116,7 @@ class SupabaseService {
     required String messageType,
     String? mediaUrl,
   }) async {
-    final client = _getClient();
+    final client = _getAuthenticatedClient();
     await client.from('messages').insert({
       'chat_id': chatId,
       'sender_id': senderId,
@@ -112,7 +138,7 @@ class SupabaseService {
     int limit = 50,
     int offset = 0,
   }) async {
-    final client = _getClient();
+    final client = _getAuthenticatedClient();
     final response = await client
         .from('messages')
         .select('*')
@@ -125,7 +151,7 @@ class SupabaseService {
 
   /// Stream messages in real-time
   Stream<List<Map<String, dynamic>>> getRoomMessagesStream(String chatId) {
-    final client = _getClient();
+    final client = _getAuthenticatedClient();
     return client.from('messages').stream(primaryKey: ['id']).map((rows) {
       // rows is List<dynamic>, we filter manually
       return (rows as List<dynamic>)
@@ -137,13 +163,13 @@ class SupabaseService {
 
   /// Mark message as read
   Future<void> markMessageAsRead(String messageId) async {
-    final client = _getClient();
+    final client = _getAuthenticatedClient();
     await client.from('messages').update({'is_read': true}).eq('id', messageId);
   }
 
   /// Get unread message count
   Future<int> getUnreadMessageCount(String chatId, String userId) async {
-    final client = _getClient();
+    final client = _getAuthenticatedClient();
     final response = await client
         .from('messages')
         .select('id')

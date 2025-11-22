@@ -1,6 +1,8 @@
 import 'package:chat_app/services/call_service.dart';
+// ignore: unused_import
 import 'package:chat_app/service/auth_service.dart';
 import 'package:get/get.dart';
+import '../core/error_handler.dart';
 
 class CallProvider extends GetxController {
   final _callService = CallService();
@@ -12,12 +14,14 @@ class CallProvider extends GetxController {
 
   // Load call logs by chatId
   Future<void> loadCallLogs(String chatId) async {
+    final errorHandler = ErrorHandler();
+
     try {
       isLoading.value = true;
       final logs = await _callService.getCallLogs(chatId);
       callLogs.value = logs;
     } catch (e) {
-      print('Error loading call logs: $e');
+      errorHandler.handleError(e, customMessage: 'Failed to load call logs');
     } finally {
       isLoading.value = false;
     }
@@ -41,6 +45,8 @@ class CallProvider extends GetxController {
     required String callType,
     required bool missed,
   }) async {
+    final errorHandler = ErrorHandler();
+
     try {
       await _callService.addCallLog(
         chatId: chatId,
@@ -52,7 +58,7 @@ class CallProvider extends GetxController {
 
       await loadCallLogs(chatId);
     } catch (e) {
-      print('Error adding call log: $e');
+      errorHandler.handleError(e, customMessage: 'Failed to add call log');
     }
   }
 

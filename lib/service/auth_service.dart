@@ -1,5 +1,7 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/error_handler.dart';
 import '../screens/home/home.dart';
 
 class AuthService extends GetxService {
@@ -17,16 +19,15 @@ class AuthService extends GetxService {
 
   // 🟢 Login with Email & Password
   Future<void> signInWithEmailPassword(String email, String password) async {
+    final errorHandler = ErrorHandler();
+
     try {
-      if (email.isEmpty || password.isEmpty) {
-        Get.snackbar("Error", "Email and password cannot be empty.");
-        return;
-      }
+      errorHandler.validateInput(email, 'Email');
+      errorHandler.validateInput(password, 'Password', minLength: 6);
 
       final supabase = this.supabase;
       if (supabase == null) {
-        Get.snackbar("Error", "Supabase not initialized");
-        return;
+        throw Exception('Supabase not initialized');
       }
 
       final response = await supabase.auth.signInWithPassword(
@@ -35,16 +36,13 @@ class AuthService extends GetxService {
       );
 
       if (response.user == null) {
-        Get.snackbar("Login Failed", "Invalid email or password.");
-        return;
+        throw Exception('Invalid email or password');
       }
 
       Get.snackbar("Success", "Logged in successfully!");
       Get.offAll(() => const HomeTabScreen());
-    } on AuthException catch (e) {
-      Get.snackbar("Auth Error", e.message);
     } catch (e) {
-      Get.snackbar("Error", e.toString());
+      errorHandler.handleError(e, customMessage: 'Login failed');
     }
   }
 
@@ -54,16 +52,16 @@ class AuthService extends GetxService {
     String password,
     String name,
   ) async {
+    final errorHandler = ErrorHandler();
+
     try {
-      if (email.isEmpty || password.isEmpty || name.isEmpty) {
-        Get.snackbar("Error", "All fields are required.");
-        return;
-      }
+      errorHandler.validateInput(email, 'Email');
+      errorHandler.validateInput(password, 'Password', minLength: 6);
+      errorHandler.validateInput(name, 'Name', minLength: 2);
 
       final supabase = this.supabase;
       if (supabase == null) {
-        Get.snackbar("Error", "Supabase not initialized");
-        return;
+        throw Exception('Supabase not initialized');
       }
 
       final response = await supabase.auth.signUp(
@@ -72,8 +70,7 @@ class AuthService extends GetxService {
       );
 
       if (response.user == null) {
-        Get.snackbar("Sign Up Failed", "Something went wrong.");
-        return;
+        throw Exception('Sign up failed');
       }
 
       await supabase.from("profiles").insert({
@@ -83,44 +80,44 @@ class AuthService extends GetxService {
       });
 
       Get.snackbar("Success", "Account created successfully!");
-    } on AuthException catch (e) {
-      Get.snackbar("Auth Error", e.message);
     } catch (e) {
-      Get.snackbar("Error", e.toString());
+      errorHandler.handleError(e, customMessage: 'Sign up failed');
     }
   }
 
   // 🔵 Google Sign-In
   Future<void> signInWithGoogle() async {
+    final errorHandler = ErrorHandler();
+
     try {
       final supabase = this.supabase;
       if (supabase == null) {
-        Get.snackbar("Error", "Supabase not initialized");
-        return;
+        throw Exception('Supabase not initialized');
       }
 
       await supabase.auth.signInWithOAuth(
         OAuthProvider.google,
-        redirectTo: "https://vfvvoxumctiaugtqfkbq.supabase.co/auth/v1/callback",
+        redirectTo: "${dotenv.env['SUPABASE_URL']}/auth/v1/callback",
       );
     } catch (e) {
-      Get.snackbar("Google Sign-In Failed", e.toString());
+      errorHandler.handleError(e, customMessage: 'Google sign-in failed');
     }
   }
 
   // 🔴 Logout
   Future<void> signOut() async {
+    final errorHandler = ErrorHandler();
+
     try {
       final supabase = this.supabase;
       if (supabase == null) {
-        Get.snackbar("Error", "Supabase not initialized");
-        return;
+        throw Exception('Supabase not initialized');
       }
 
       await supabase.auth.signOut();
       Get.snackbar("Signed Out", "You have been logged out.");
     } catch (e) {
-      Get.snackbar("Error", e.toString());
+      errorHandler.handleError(e, customMessage: 'Sign out failed');
     }
   }
 
