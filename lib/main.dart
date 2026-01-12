@@ -7,11 +7,20 @@ import 'package:chat_app/providers/call_provider.dart';
 import 'package:chat_app/providers/friend_provider.dart';
 import 'package:chat_app/service/auth_service.dart';
 import 'package:chat_app/core/config.dart';
+import 'package:chat_app/services/notification_service.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:get/get.dart';
 import 'package:responsive_sizer/responsive_sizer.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  await NotificationService.init();
+  await NotificationService.showFromMessage(message);
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,7 +49,30 @@ void main() async {
     // In production, show error screen
   }
 
-  // ⭐ THIRD: Initialize GetX Controllers
+  // ⭐ THIRD: Initialize Firebase for background/foreground messaging
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(
+      _firebaseMessagingBackgroundHandler,
+    );
+    await NotificationService.init();
+    await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+    FirebaseMessaging.onMessage.listen(NotificationService.showFromMessage);
+    print('✅ Firebase initialized successfully');
+  } catch (e) {
+    print('❌ Failed to initialize Firebase: $e');
+  }
+
+  // ⭐ FOURTH: Initialize GetX Controllers
   Get.put(AuthService(), permanent: true);
   Get.put(UserProvider(), permanent: true);
   Get.put(ChatProvider(), permanent: true);
@@ -72,7 +104,7 @@ class ChatApp extends StatelessWidget {
             primaryColor: Colors.blue,
           ),
           themeMode: ThemeMode.system,
-          initialRoute: AppRoutes.onboarding,
+          initialRoute: AppRoutes.splash,
           getPages: AppRoutes.routes,
         );
       },

@@ -6,6 +6,7 @@ class AppConfig {
   static String get supabaseAnonKey => dotenv.env['SUPABASE_ANON_KEY'] ?? '';
   static String get zegoAppId => dotenv.env['ZEGO_APP_ID'] ?? '';
   static String get zegoAppSign => dotenv.env['ZEGO_APP_SIGN'] ?? '';
+  static int get zegoAppIdValue => int.tryParse(zegoAppId) ?? 0;
 
   /// Validate only required environment variables
   static bool validate() {

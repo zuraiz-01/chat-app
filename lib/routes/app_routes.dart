@@ -45,7 +45,6 @@ class AppRoutes {
   static const String account = '/account';
   static const String chatSettings = '/chatSettings';
   static const String notificationsSettings = '/notificationsSettings';
-  static const String chatlist = '/chatlist';
 
   // 🔐 Auth Routes
   static const String login = '/login';
@@ -90,7 +89,6 @@ class AppRoutes {
     // 🔔 Notifications & Search
     GetPage(name: notifications, page: () => const NotificationsScreen()),
     GetPage(name: search, page: () => const SearchScreen()),
-    GetPage(name: chatList, page: () => const ChatListScreen()),
 
     // ⚙️ Settings
     GetPage(name: settings, page: () => const SettingsScreen()),

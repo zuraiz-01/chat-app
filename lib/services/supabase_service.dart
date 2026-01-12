@@ -88,20 +88,26 @@ class SupabaseService {
   Stream<List<Map<String, dynamic>>> getUserChatRoomsStream(String userId) {
     final client = _getAuthenticatedClient();
     return client
-        .from('chats')
+        .from('chat_participants')
         .stream(primaryKey: ['id'])
-        .order('updated_at')
+        .eq('user_id', userId)
         .map(
-          (rows) => rows
-              .where(
-                (chat) =>
-                    (chat['participants'] as List<dynamic>?)?.any(
-                      (p) => p['user_id'] == userId,
-                    ) ??
-                    false,
-              )
-              .toList(),
-        );
+          (rows) => rows.map((row) => row['chat_id']).whereType<String>().toList(),
+        )
+        .asyncMap((chatIds) async {
+          if (chatIds.isEmpty) {
+            return <Map<String, dynamic>>[];
+          }
+
+          final quotedIds = chatIds.map((id) => "'$id'").join(',');
+          final response = await client
+              .from('chats')
+              .select('*')
+              .filter('id', 'in', '($quotedIds)')
+              .order('updated_at', ascending: false);
+
+          return List<Map<String, dynamic>>.from(response);
+        });
   }
 
   // ===========================

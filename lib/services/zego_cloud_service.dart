@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:chat_app/core/config.dart';
 import 'package:zego_uikit/zego_uikit.dart';
 import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart';
 import 'package:zego_uikit_signaling_plugin/zego_uikit_signaling_plugin.dart';
@@ -9,9 +10,8 @@ class ZegoCloudService {
   ZegoCloudService._internal();
 
   // Zego Cloud Credentials
-  static const int appId = 880377377;
-  static const String appSign =
-      'e63bb89680d72cc6bf929988023b2470485c33729eeae8b94e23aa29d410ed08';
+  static int get appId => AppConfig.zegoAppIdValue;
+  static String get appSign => AppConfig.zegoAppSign;
 
   /// ===========================
   /// MARK: - Initialize Zego

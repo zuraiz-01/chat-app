@@ -1,5 +1,5 @@
-import 'package:chat_app/screens/auth/login_screen.dart';
 import 'package:chat_app/screens/home/home.dart';
+import 'package:chat_app/screens/splash/onboarding_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -38,7 +38,12 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _checkAuthState() {
     Future.delayed(const Duration(seconds: 3), () {
-      Get.offAll(() => const LoginScreen());
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        Get.offAll(() => const HomeTabScreen());
+      } else {
+        Get.offAll(() => const OnboardingScreen());
+      }
     });
   }
 
